@@ -73,6 +73,7 @@
   - Create app/page.jsx as main application entry point
   - Add responsive design with Tailwind CSS classes
   - Integrate chat interface into main layout
+  - convert layout.js to layout.jsx, convert page.js to page.jsx 
   - _Requirements: 4.1, 4.3, 4.4_
 
 - [ ] 12. Add error handling and user feedback, don't need any test implementation and example files

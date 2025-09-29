@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useRef, useEffect, useCallback } from 'react';
 import Messages from './Messages';
 import useChatStore from '../store/chatStore';
@@ -37,8 +39,8 @@ function MessageInput({ onSendMessage, disabled }) {
   }, [handleSubmit]);
 
   return (
-    <form onSubmit={handleSubmit} className="border-t bg-white p-4">
-      <div className="flex space-x-2">
+    <form onSubmit={handleSubmit} className="border-t bg-gray-50 p-4 sm:p-6">
+      <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
         <textarea
           ref={inputRef}
           value={currentInput}
@@ -47,13 +49,14 @@ function MessageInput({ onSendMessage, disabled }) {
           placeholder="Ask me a mathematical question..."
           disabled={disabled}
           className={cn(
-            "flex-1 resize-none border border-gray-300 rounded-lg px-3 py-2",
+            "flex-1 resize-none border border-gray-300 rounded-lg px-4 py-3",
             "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
-            "disabled:bg-gray-100 disabled:cursor-not-allowed"
+            "disabled:bg-gray-100 disabled:cursor-not-allowed",
+            "text-sm sm:text-base"
           )}
           rows={1}
           style={{
-            minHeight: '40px',
+            minHeight: '48px',
             maxHeight: '120px'
           }}
         />
@@ -61,12 +64,14 @@ function MessageInput({ onSendMessage, disabled }) {
           type="submit"
           disabled={disabled || !currentInput.trim()}
           className={cn(
-            "px-4 py-2 bg-blue-600 text-white rounded-lg",
+            "px-6 py-3 bg-blue-600 text-white rounded-lg font-medium",
             "hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2",
-            "disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            "disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors",
+            "text-sm sm:text-base whitespace-nowrap",
+            "sm:self-end"
           )}
         >
-          Send
+          {disabled ? 'Sending...' : 'Send'}
         </button>
       </div>
     </form>
@@ -181,12 +186,6 @@ export default function ChatView() {
 
   return (
     <div className="flex flex-col h-full bg-white">
-      {/* Chat Header */}
-      <div className="border-b bg-gray-50 px-4 py-3">
-        <h1 className="text-lg font-semibold text-gray-900">AI Math Assistant</h1>
-        <p className="text-sm text-gray-600">Ask mathematical questions and get interactive tools</p>
-      </div>
-
       {/* Messages Area */}
       <div className="flex-1 overflow-hidden">
         <Messages onInteraction={handleUIInteraction} />
