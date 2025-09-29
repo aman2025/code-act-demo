@@ -7,13 +7,13 @@
   - Create project directory structure (components, core, store, utils)
   - _Requirements: 4.1, 4.4_
 
-- [ ] 2. Configure environment and basic API setup
+- [x] 2. Configure environment and basic API setup
   - Create .env.example file with MISTRAL_API_KEY placeholder
   - Set up Next.js configuration for API routes
   - Create basic API route structure at /api/chat
   - _Requirements: 6.1, 6.3_
 
-- [ ] 3. Implement core AI service integration
+- [x] 3. Implement core AI service integration
   - Create aiService.js with Mistral API integration
   - Implement prompt engineering for structured responses with <thought> and <ui> tags
   - Add response parsing to extract reasoning and UI code sections
