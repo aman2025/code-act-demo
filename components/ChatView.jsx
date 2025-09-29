@@ -152,33 +152,32 @@ export default function ChatView() {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || `HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
 
       if (data.error) {
-        throw new Error(data.error);
+        throw new Error(typeof data.error === 'string' ? data.error : data.error.message);
       }
 
-      // Add calculation result as AI message
-      if (data.solution) {
-        addAIMessage(
-          data.reasoning ? `${data.reasoning}\n\nResult: ${data.solution}` : `Result: ${data.solution}`,
-          null
-        );
-      }
+      // Return the result to the DynamicUIRenderer for inline display
+      // instead of adding a new message
+      return {
+        solution: data.solution,
+        reasoning: data.reasoning,
+        componentId: data.componentId
+      };
       
     } catch (error) {
       console.error('Error handling UI interaction:', error);
-      addAIMessage(
-        `Sorry, I encountered an error during calculation: ${error.message}`,
-        null
-      );
+      // Return error for inline display
+      throw error;
     } finally {
       setLoading(false);
     }
-  }, [addAIMessage, setLoading]);
+  }, [setLoading]);
 
   return (
     <div className="flex flex-col h-full bg-white">

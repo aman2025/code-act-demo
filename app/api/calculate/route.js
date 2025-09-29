@@ -23,8 +23,45 @@ export async function POST(request) {
       );
     }
 
-    // Create calculation prompt with user values
-    const calculationPrompt = createCalculationPrompt(action, values, context);
+    // Validate that values object is not empty
+    if (Object.keys(values).length === 0) {
+      return Response.json(
+        {
+          error: {
+            type: 'validation_error',
+            message: 'At least one input value is required for calculation.'
+          }
+        },
+        { status: 400 }
+      );
+    }
+
+    // Sanitize values to prevent injection attacks
+    const sanitizedValues = {};
+    for (const [key, value] of Object.entries(values)) {
+      // Only allow alphanumeric keys
+      if (!/^[a-zA-Z0-9_]+$/.test(key)) {
+        return Response.json(
+          {
+            error: {
+              type: 'validation_error',
+              message: `Invalid field name: ${key}. Only alphanumeric characters and underscores are allowed.`
+            }
+          },
+          { status: 400 }
+        );
+      }
+      
+      // Sanitize string values
+      if (typeof value === 'string') {
+        sanitizedValues[key] = value.trim().slice(0, 1000); // Limit length
+      } else {
+        sanitizedValues[key] = value;
+      }
+    }
+
+    // Create calculation prompt with sanitized values
+    const calculationPrompt = createCalculationPrompt(action, sanitizedValues, context);
 
     // Get AI response for calculation
     const aiResponse = await aiService.generateCalculationResponse(calculationPrompt);
@@ -72,20 +109,39 @@ export async function POST(request) {
  * @returns {string} - Formatted calculation prompt
  */
 function createCalculationPrompt(action, values, context) {
-  // Convert values object to a readable format
+  // Convert values object to a readable format with type information
   const valuesList = Object.entries(values)
-    .map(([key, value]) => `${key}: ${value}`)
+    .map(([key, value]) => {
+      // Provide type context for better AI understanding
+      const numValue = Number(value);
+      const isNumber = !isNaN(numValue) && value !== '';
+      return `${key}: ${value}${isNumber ? ` (numeric: ${numValue})` : ' (text)'}`;
+    })
     .join(', ');
 
-  return `Please perform the calculation "${action}" with the following user-provided values: ${valuesList}
+  // Enhanced prompt with better context and validation
+  return `Please perform the calculation "${action}" with the following user-provided values:
 
-${context ? `Original context: ${context}` : ''}
+Input Values:
+${valuesList}
+
+${context ? `Original Question Context: ${context}` : ''}
+
+Instructions:
+1. Validate that all required inputs are provided and reasonable
+2. Perform the calculation step by step
+3. Round results to appropriate precision (typically 2-4 decimal places)
+4. Include units in your final answer when applicable
 
 Please structure your response with:
-1. <thought>Your calculation process and reasoning</thought>
-2. <solution>The final numerical result or answer</solution>
+<thought>
+- Validate inputs and identify any issues
+- Show your calculation process step by step
+- Explain any assumptions or formulas used
+</thought>
+<solution>The final numerical result with appropriate units and formatting</solution>
 
-Show your work in the thought section and provide the clean final answer in the solution section.`;
+If any inputs are invalid or missing, explain the issue in the thought section and provide guidance in the solution section.`;
 }
 
 /**

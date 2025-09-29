@@ -9,7 +9,8 @@ export function sanitizeProps(props = {}) {
   const sanitized = {};
   const allowedProps = [
     'id', 'className', 'style', 'placeholder', 'type', 'name', 'value', 
-    'min', 'max', 'step', 'required', 'disabled', 'readOnly'
+    'min', 'max', 'step', 'required', 'disabled', 'readOnly', 'pattern',
+    'minLength', 'maxLength', 'title', 'autoComplete', 'inputMode'
   ];
   
   // Only allow safe props
@@ -27,8 +28,16 @@ export function sanitizeProps(props = {}) {
         });
         sanitized[key] = safeStyles;
       } else if (key === 'className' && typeof props[key] === 'string') {
-        // Allow only alphanumeric, hyphens, and spaces for class names
-        sanitized[key] = props[key].replace(/[^a-zA-Z0-9\s\-_]/g, '');
+        // Allow only alphanumeric, hyphens, spaces, and colons for class names (for Tailwind)
+        sanitized[key] = props[key].replace(/[^a-zA-Z0-9\s\-_:]/g, '');
+      } else if (key === 'pattern' && typeof props[key] === 'string') {
+        // Sanitize regex patterns to prevent ReDoS attacks
+        try {
+          new RegExp(props[key]);
+          sanitized[key] = props[key];
+        } catch (e) {
+          console.warn('Invalid regex pattern ignored:', props[key]);
+        }
       } else {
         sanitized[key] = props[key];
       }
@@ -47,9 +56,25 @@ export function sanitizeInputProps(props = {}) {
   const sanitized = sanitizeProps(props);
   
   // Ensure type is safe for inputs
-  const allowedInputTypes = ['text', 'number', 'email', 'password', 'tel', 'url', 'search'];
+  const allowedInputTypes = ['text', 'number', 'email', 'password', 'tel', 'url', 'search', 'date', 'time', 'range'];
   if (sanitized.type && !allowedInputTypes.includes(sanitized.type)) {
     sanitized.type = 'text';
+  }
+  
+  // Validate numeric constraints
+  if (sanitized.type === 'number' || sanitized.type === 'range') {
+    if (sanitized.min !== undefined) {
+      sanitized.min = Number(sanitized.min);
+      if (isNaN(sanitized.min)) delete sanitized.min;
+    }
+    if (sanitized.max !== undefined) {
+      sanitized.max = Number(sanitized.max);
+      if (isNaN(sanitized.max)) delete sanitized.max;
+    }
+    if (sanitized.step !== undefined) {
+      sanitized.step = Number(sanitized.step);
+      if (isNaN(sanitized.step)) delete sanitized.step;
+    }
   }
   
   return sanitized;
@@ -134,29 +159,50 @@ function createElement(definition, key) {
 }
 
 /**
- * Creates an input element
+ * Creates an input element with enhanced validation styling
  */
 function createInput(definition, key) {
   const { props = {} } = definition;
   const sanitizedProps = sanitizeInputProps(props);
   
+  // Base classes for input styling
+  const baseClasses = 'border rounded px-3 py-2 focus:outline-none focus:ring-2 transition-colors';
+  const normalClasses = 'border-gray-300 focus:ring-blue-500 focus:border-blue-500';
+  const errorClasses = 'border-red-500 focus:ring-red-500 focus:border-red-500';
+  
+  // Check if this input has error styling (will be added by DynamicUIRenderer)
+  const hasError = sanitizedProps.className?.includes('border-red-500');
+  const validationClasses = hasError ? errorClasses : normalClasses;
+  
+  const finalClassName = `${baseClasses} ${validationClasses} ${sanitizedProps.className || ''}`.trim();
+  
   return React.createElement('input', {
     key,
-    className: `border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${sanitizedProps.className || ''}`,
+    className: finalClassName,
     ...sanitizedProps
   });
 }
 
 /**
- * Creates a button element
+ * Creates a button element with enhanced state styling
  */
 function createButton(definition, key) {
   const { props = {}, text = 'Button' } = definition;
   const sanitizedProps = sanitizeProps(props);
   
+  // Base button classes
+  const baseClasses = 'font-medium py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors';
+  
+  // State-based styling
+  const enabledClasses = 'bg-blue-500 hover:bg-blue-600 text-white focus:ring-blue-500';
+  const disabledClasses = 'bg-gray-400 text-gray-200 cursor-not-allowed';
+  
+  const stateClasses = sanitizedProps.disabled ? disabledClasses : enabledClasses;
+  const finalClassName = `${baseClasses} ${stateClasses} ${sanitizedProps.className || ''}`.trim();
+  
   return React.createElement('button', {
     key,
-    className: `bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${sanitizedProps.className || ''}`,
+    className: finalClassName,
     type: 'button',
     ...sanitizedProps
   }, text);

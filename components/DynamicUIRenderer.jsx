@@ -1,5 +1,6 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import ComponentFactory from './ComponentFactory';
+import useChatStore from '../store/chatStore';
 
 /**
  * DynamicUIRenderer - Renders AI-generated UI components safely
@@ -15,44 +16,188 @@ export default function DynamicUIRenderer({
 }) {
   const [componentStates, setComponentStates] = useState({});
   const [isCalculating, setIsCalculating] = useState(false);
+  const [validationErrors, setValidationErrors] = useState({});
+  const [calculationResults, setCalculationResults] = useState({});
+  const [autoCalculateEnabled, setAutoCalculateEnabled] = useState(false);
+  
+  // Get UI state from store for persistence
+  const updateUIState = useChatStore((state) => state.updateUIState);
+  const getUIState = useChatStore((state) => state.getUIState);
+  
+  // Refs for debouncing
+  const debounceTimeouts = useRef({});
 
   /**
-   * Handles input changes in generated components
+   * Validates input value based on type and constraints
    */
-  const handleInputChange = useCallback((componentId, name, value) => {
-    setComponentStates(prev => ({
-      ...prev,
-      [componentId]: {
-        ...prev[componentId],
-        [name]: value
-      }
-    }));
+  const validateInput = useCallback((name, value, type, props = {}) => {
+    const errors = [];
+    
+    // Type-specific validation
+    switch (type) {
+      case 'number':
+        if (value !== '' && isNaN(Number(value))) {
+          errors.push('Must be a valid number');
+        } else if (value !== '') {
+          const numValue = Number(value);
+          if (props.min !== undefined && numValue < props.min) {
+            errors.push(`Must be at least ${props.min}`);
+          }
+          if (props.max !== undefined && numValue > props.max) {
+            errors.push(`Must be at most ${props.max}`);
+          }
+        }
+        break;
+      case 'email':
+        if (value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+          errors.push('Must be a valid email address');
+        }
+        break;
+      case 'tel':
+        if (value && !/^[\d\s\-\+\(\)]+$/.test(value)) {
+          errors.push('Must be a valid phone number');
+        }
+        break;
+    }
+    
+    // Required field validation
+    if (props.required && (!value || value.toString().trim() === '')) {
+      errors.push('This field is required');
+    }
+    
+    return errors;
   }, []);
 
   /**
-   * Handles button clicks in generated components
+   * Handles input changes in generated components with validation
+   */
+  const handleInputChange = useCallback((componentId, name, value, type, props = {}) => {
+    // Update component state
+    const newState = {
+      ...componentStates[componentId],
+      [name]: value
+    };
+    
+    setComponentStates(prev => ({
+      ...prev,
+      [componentId]: newState
+    }));
+    
+    // Update global UI state for persistence
+    updateUIState(`${messageId}-${componentId}`, newState);
+    
+    // Validate input
+    const errors = validateInput(name, value, type, props);
+    setValidationErrors(prev => ({
+      ...prev,
+      [`${componentId}-${name}`]: errors
+    }));
+    
+    // Clear previous calculation results when inputs change
+    if (calculationResults[componentId]) {
+      setCalculationResults(prev => ({
+        ...prev,
+        [componentId]: null
+      }));
+    }
+    
+    // Auto-calculate with debouncing if enabled and all required fields are filled
+    if (autoCalculateEnabled && onInteraction) {
+      // Clear existing timeout
+      if (debounceTimeouts.current[componentId]) {
+        clearTimeout(debounceTimeouts.current[componentId]);
+      }
+      
+      // Set new timeout for auto-calculation
+      debounceTimeouts.current[componentId] = setTimeout(() => {
+        const validation = validateComponent(componentId);
+        if (validation.isValid) {
+          // Check if we have meaningful values (not just empty strings)
+          const hasValues = Object.values(newState).some(val => 
+            val !== null && val !== undefined && val.toString().trim() !== ''
+          );
+          
+          if (hasValues) {
+            handleButtonClick(componentId, 'calculate');
+          }
+        }
+      }, 1500); // 1.5 second delay
+    }
+  }, [componentStates, updateUIState, validateInput, calculationResults, autoCalculateEnabled, onInteraction, validateComponent, handleButtonClick]);
+
+  /**
+   * Validates all inputs in a component before calculation
+   */
+  const validateComponent = useCallback((componentId) => {
+    const componentState = componentStates[componentId] || {};
+    const errors = {};
+    let hasErrors = false;
+    
+    // Check for validation errors
+    Object.keys(validationErrors).forEach(key => {
+      if (key.startsWith(`${componentId}-`) && validationErrors[key].length > 0) {
+        errors[key] = validationErrors[key];
+        hasErrors = true;
+      }
+    });
+    
+    return { isValid: !hasErrors, errors };
+  }, [componentStates, validationErrors]);
+
+  /**
+   * Handles button clicks in generated components with validation
    */
   const handleButtonClick = useCallback(async (componentId, action) => {
     if (!onInteraction) return;
     
+    // Validate component inputs before proceeding
+    const validation = validateComponent(componentId);
+    if (!validation.isValid) {
+      // Show validation errors
+      console.warn('Validation errors:', validation.errors);
+      return;
+    }
+    
     setIsCalculating(true);
     try {
       const componentState = componentStates[componentId] || {};
-      await onInteraction({
+      
+      // Call the interaction handler
+      const result = await onInteraction({
         action,
         componentId,
         values: componentState,
         messageId
       });
+      
+      // Store calculation result for display
+      if (result && result.solution) {
+        setCalculationResults(prev => ({
+          ...prev,
+          [componentId]: {
+            solution: result.solution,
+            reasoning: result.reasoning,
+            timestamp: new Date()
+          }
+        }));
+      }
+      
     } catch (error) {
       console.error('Error handling button click:', error);
+      setCalculationResults(prev => ({
+        ...prev,
+        [componentId]: {
+          error: error.message,
+          timestamp: new Date()
+        }
+      }));
     } finally {
       setIsCalculating(false);
     }
-  }, [componentStates, onInteraction, messageId]);
+  }, [componentStates, onInteraction, messageId, validateComponent]);
 
   /**
-   * Enhances component definitions with event handlers
+   * Enhances component definitions with event handlers and validation
    */
   const enhanceComponentWithHandlers = useCallback((definition, componentId) => {
     if (!definition || typeof definition !== 'object') {
@@ -64,19 +209,26 @@ export default function DynamicUIRenderer({
     // Add event handlers based on component type
     switch (definition.type) {
       case 'input':
+        const inputName = enhanced.props?.name;
+        const inputType = enhanced.props?.type || 'text';
+        const currentValue = componentStates[componentId]?.[inputName] || '';
+        const hasError = validationErrors[`${componentId}-${inputName}`]?.length > 0;
+        
         enhanced.props = {
           ...enhanced.props,
           onChange: (e) => {
             const { name, value } = e.target;
             if (name) {
-              handleInputChange(componentId, name, value);
+              handleInputChange(componentId, name, value, inputType, enhanced.props);
             }
           },
-          value: componentStates[componentId]?.[enhanced.props?.name] || ''
+          value: currentValue,
+          className: `${enhanced.props?.className || ''} ${hasError ? 'border-red-500 focus:ring-red-500' : ''}`.trim()
         };
         break;
 
       case 'button':
+        const validation = validateComponent(componentId);
         enhanced.props = {
           ...enhanced.props,
           onClick: () => {
@@ -89,12 +241,14 @@ export default function DynamicUIRenderer({
             }
             handleButtonClick(componentId, action);
           },
-          disabled: isCalculating
+          disabled: isCalculating || !validation.isValid
         };
         
-        // Update button text if calculating
+        // Update button text based on state
         if (isCalculating && enhanced.text) {
           enhanced.text = 'Calculating...';
+        } else if (!validation.isValid && enhanced.text) {
+          enhanced.text = enhanced.text; // Keep original text but button is disabled
         }
         break;
 
@@ -113,7 +267,65 @@ export default function DynamicUIRenderer({
     }
 
     return enhanced;
-  }, [componentStates, handleInputChange, handleButtonClick, isCalculating]);
+  }, [componentStates, validationErrors, handleInputChange, handleButtonClick, isCalculating, validateComponent]);
+
+  /**
+   * Renders validation errors for a component
+   */
+  const renderValidationErrors = useCallback((componentId) => {
+    const componentErrors = Object.keys(validationErrors)
+      .filter(key => key.startsWith(`${componentId}-`))
+      .reduce((acc, key) => {
+        const fieldName = key.replace(`${componentId}-`, '');
+        const errors = validationErrors[key];
+        if (errors.length > 0) {
+          acc[fieldName] = errors;
+        }
+        return acc;
+      }, {});
+
+    if (Object.keys(componentErrors).length === 0) return null;
+
+    return (
+      <div className="mt-2 space-y-1">
+        {Object.entries(componentErrors).map(([fieldName, errors]) => (
+          <div key={fieldName} className="text-red-600 text-sm">
+            <strong>{fieldName}:</strong> {errors.join(', ')}
+          </div>
+        ))}
+      </div>
+    );
+  }, [validationErrors]);
+
+  /**
+   * Renders calculation results for a component
+   */
+  const renderCalculationResult = useCallback((componentId) => {
+    const result = calculationResults[componentId];
+    if (!result) return null;
+
+    if (result.error) {
+      return (
+        <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <div className="text-red-800 font-medium">Calculation Error</div>
+          <div className="text-red-600 text-sm mt-1">{result.error}</div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+        <div className="text-green-800 font-medium">Result</div>
+        <div className="text-green-700 text-lg font-semibold mt-1">{result.solution}</div>
+        {result.reasoning && (
+          <div className="text-green-600 text-sm mt-2 whitespace-pre-wrap">{result.reasoning}</div>
+        )}
+        <div className="text-green-500 text-xs mt-2">
+          Calculated at {result.timestamp.toLocaleTimeString()}
+        </div>
+      </div>
+    );
+  }, [calculationResults]);
 
   /**
    * Renders a single component definition
@@ -122,7 +334,7 @@ export default function DynamicUIRenderer({
     if (!definition) return null;
 
     // Generate a unique component ID
-    const componentId = `${messageId}-component-${index}`;
+    const componentId = `component-${index}`;
     
     // Validate the component definition
     if (!ComponentFactory.validate(definition)) {
@@ -152,6 +364,8 @@ export default function DynamicUIRenderer({
       return (
         <div key={componentId} className="dynamic-component">
           {element}
+          {renderValidationErrors(componentId)}
+          {renderCalculationResult(componentId)}
         </div>
       );
     } catch (error) {
@@ -162,7 +376,17 @@ export default function DynamicUIRenderer({
         </div>
       );
     }
-  }, [messageId, enhanceComponentWithHandlers]);
+  }, [messageId, enhanceComponentWithHandlers, renderValidationErrors, renderCalculationResult]);
+
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    const timeouts = debounceTimeouts.current;
+    return () => {
+      Object.values(timeouts).forEach(timeout => {
+        if (timeout) clearTimeout(timeout);
+      });
+    };
+  }, []);
 
   // Handle empty or invalid components array
   if (!Array.isArray(components) || components.length === 0) {
@@ -171,12 +395,25 @@ export default function DynamicUIRenderer({
 
   return (
     <div className="dynamic-ui-container space-y-4 mt-4 p-4 bg-gray-50 rounded-lg border">
-      <div className="text-sm text-gray-600 font-medium">Interactive Component</div>
+      <div className="flex items-center justify-between">
+        <div className="text-sm text-gray-600 font-medium">Interactive Component</div>
+        <label className="flex items-center space-x-2 text-xs text-gray-500">
+          <input
+            type="checkbox"
+            checked={autoCalculateEnabled}
+            onChange={(e) => setAutoCalculateEnabled(e.target.checked)}
+            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          />
+          <span>Auto-calculate</span>
+        </label>
+      </div>
       {components.map((component, index) => renderComponent(component, index))}
       {isCalculating && (
         <div className="flex items-center space-x-2 text-blue-600">
           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-          <span className="text-sm">Processing...</span>
+          <span className="text-sm">
+            {autoCalculateEnabled ? 'Auto-calculating...' : 'Processing...'}
+          </span>
         </div>
       )}
     </div>
