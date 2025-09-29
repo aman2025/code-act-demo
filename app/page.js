@@ -5,7 +5,7 @@ export default function Home() {
         <h1 className="text-4xl font-bold text-center">
           AI Chat Dynamic UI
         </h1>
-        <p className="text-center mt-4 text-muted-foreground">
+        <p className="text-center mt-4 text-gray-600">
           AI-powered chat application with dynamic UI generation
         </p>
       </div>
