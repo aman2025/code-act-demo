@@ -136,6 +136,129 @@ Please provide your response following the exact format above.`;
   }
 
   /**
+   * Generate a calculation response for user input values
+   * @param {string} calculationPrompt - The calculation prompt with user values
+   * @returns {Promise<Object>} - Structured response with reasoning and solution
+   */
+  async generateCalculationResponse(calculationPrompt) {
+    try {
+      // Validate API key
+      if (!this.apiKey) {
+        throw new Error('Mistral API key not configured');
+      }
+
+      // Validate input
+      if (!calculationPrompt || typeof calculationPrompt !== 'string') {
+        throw new Error('Invalid calculation prompt provided');
+      }
+
+      // Call Mistral API directly with calculation prompt
+      const response = await fetch(MISTRAL_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'mistral-large-latest',
+          messages: [
+            {
+              role: 'user',
+              content: calculationPrompt
+            }
+          ],
+          temperature: 0.3, // Lower temperature for more precise calculations
+          max_tokens: 1000
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`Mistral API error: ${response.status} - ${errorData.message || response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      // Extract content from API response
+      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+        throw new Error('Invalid response format from Mistral API');
+      }
+
+      const content = data.choices[0].message.content;
+
+      // Parse calculation response
+      const parsedResponse = this.parseCalculationResponse(content);
+
+      return {
+        success: true,
+        reasoning: parsedResponse.reasoning,
+        solution: parsedResponse.solution,
+        rawContent: content
+      };
+
+    } catch (error) {
+      console.error('AI Service Calculation Error:', error);
+      
+      // Handle network errors specifically
+      if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        return {
+          success: false,
+          error: {
+            type: 'network_error',
+            message: 'Network error: Unable to connect to Mistral API'
+          }
+        };
+      }
+      
+      return {
+        success: false,
+        error: {
+          type: this.getErrorType(error),
+          message: error.message,
+          details: error.stack
+        }
+      };
+    }
+  }
+
+  /**
+   * Parse calculation response to extract thought and solution sections
+   * @param {string} content - Raw response content from Mistral
+   * @returns {Object} - Parsed response with reasoning and solution
+   */
+  parseCalculationResponse(content) {
+    const result = {
+      reasoning: '',
+      solution: ''
+    };
+
+    // Extract thought section
+    const thoughtMatch = content.match(/<thought>([\s\S]*?)<\/thought>/i);
+    if (thoughtMatch) {
+      result.reasoning = thoughtMatch[1].trim();
+    }
+
+    // Extract solution section
+    const solutionMatch = content.match(/<solution>([\s\S]*?)<\/solution>/i);
+    if (solutionMatch) {
+      result.solution = solutionMatch[1].trim();
+    }
+
+    // If no structured tags found, try to extract the final answer
+    if (!thoughtMatch && !solutionMatch) {
+      result.reasoning = content.trim();
+      // Try to find a numerical result at the end
+      const lines = content.trim().split('\n');
+      const lastLine = lines[lines.length - 1];
+      if (lastLine && (lastLine.includes('$') || lastLine.match(/\d+/))) {
+        result.solution = lastLine.trim();
+      }
+    }
+
+    return result;
+  }
+
+  /**
    * Main method to get AI response for mathematical questions
    * @param {string} userMessage - User's mathematical question
    * @returns {Promise<Object>} - Structured response with reasoning and UI code
