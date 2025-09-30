@@ -183,10 +183,20 @@ function createInput(definition, key) {
   const baseClasses = 'border rounded px-3 py-2 focus:outline-none focus:ring-2 transition-colors';
   const normalClasses = 'border-gray-300 focus:ring-blue-500 focus:border-blue-500';
   const errorClasses = 'border-red-500 focus:ring-red-500 focus:border-red-500';
+  const disabledClasses = 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed';
   
   // Check if this input has error styling (will be added by DynamicUIRenderer)
   const hasError = sanitizedProps.className?.includes('border-red-500');
-  const validationClasses = hasError ? errorClasses : normalClasses;
+  const isDisabled = sanitizedProps.disabled;
+  
+  let validationClasses;
+  if (isDisabled) {
+    validationClasses = disabledClasses;
+  } else if (hasError) {
+    validationClasses = errorClasses;
+  } else {
+    validationClasses = normalClasses;
+  }
   
   const finalClassName = `${baseClasses} ${validationClasses} ${sanitizedProps.className || ''}`.trim();
   
@@ -270,10 +280,20 @@ function createSelect(definition, key) {
   const baseClasses = 'border rounded px-3 py-2 focus:outline-none focus:ring-2 transition-colors bg-white';
   const normalClasses = 'border-gray-300 focus:ring-blue-500 focus:border-blue-500';
   const errorClasses = 'border-red-500 focus:ring-red-500 focus:border-red-500';
+  const disabledClasses = 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed';
   
   // Check if this select has error styling (will be added by DynamicUIRenderer)
   const hasError = sanitizedProps.className?.includes('border-red-500');
-  const validationClasses = hasError ? errorClasses : normalClasses;
+  const isDisabled = sanitizedProps.disabled;
+  
+  let validationClasses;
+  if (isDisabled) {
+    validationClasses = disabledClasses;
+  } else if (hasError) {
+    validationClasses = errorClasses;
+  } else {
+    validationClasses = normalClasses;
+  }
   
   const finalClassName = `${baseClasses} ${validationClasses} ${sanitizedProps.className || ''}`.trim();
   

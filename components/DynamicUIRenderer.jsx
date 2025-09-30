@@ -250,6 +250,7 @@ export default function DynamicUIRenderer({
     }
 
     const enhanced = { ...definition };
+    const hasResult = calculationResults[componentId] && !calculationResults[componentId].error;
 
     // Add event handlers based on component type
     switch (definition.type) {
@@ -269,6 +270,7 @@ export default function DynamicUIRenderer({
             }
           },
           value: currentValue,
+          disabled: hasResult || isCalculating, // Disable after successful calculation
           className: `${enhanced.props?.className || ''} ${hasError ? 'border-red-500 focus:ring-red-500' : ''}`.trim()
         };
         break;
@@ -287,6 +289,7 @@ export default function DynamicUIRenderer({
             }
           },
           value: currentSelectValue,
+          disabled: hasResult || isCalculating, // Disable after successful calculation
           className: `${enhanced.props?.className || ''} ${hasSelectError ? 'border-red-500 focus:ring-red-500' : ''}`.trim()
         };
         break;
@@ -305,12 +308,14 @@ export default function DynamicUIRenderer({
             }
             handleButtonClick(componentId, action);
           },
-          disabled: isCalculating // Remove validation check to allow initial clicks
+          disabled: hasResult || isCalculating // Disable after successful calculation or while calculating
         };
         
         // Update button text based on state
         if (isCalculating && enhanced.text) {
           enhanced.text = 'Calculating...';
+        } else if (hasResult && enhanced.text) {
+          enhanced.text = 'Calculated';
         }
         break;
 
@@ -360,6 +365,28 @@ export default function DynamicUIRenderer({
   }, [validationErrors]);
 
   /**
+   * Handles resetting a component to allow recalculation
+   */
+  const handleReset = useCallback((componentId) => {
+    // Clear calculation results
+    setCalculationResults(prev => ({
+      ...prev,
+      [componentId]: null
+    }));
+    
+    // Clear validation errors
+    setValidationErrors(prev => {
+      const newErrors = { ...prev };
+      Object.keys(newErrors).forEach(key => {
+        if (key.startsWith(`${componentId}-`)) {
+          delete newErrors[key];
+        }
+      });
+      return newErrors;
+    });
+  }, []);
+
+  /**
    * Renders calculation results for a component
    */
   const renderCalculationResult = useCallback((componentId) => {
@@ -369,7 +396,15 @@ export default function DynamicUIRenderer({
     if (result.error) {
       return (
         <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-          <div className="text-red-800 font-medium">Calculation Error</div>
+          <div className="flex items-center justify-between">
+            <div className="text-red-800 font-medium">Calculation Error</div>
+            <button
+              onClick={() => handleReset(componentId)}
+              className="text-red-600 hover:text-red-800 text-sm underline"
+            >
+              Try Again
+            </button>
+          </div>
           <div className="text-red-600 text-sm mt-1">{result.error}</div>
         </div>
       );
@@ -377,7 +412,15 @@ export default function DynamicUIRenderer({
 
     return (
       <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
-        <div className="text-green-800 font-medium">Result</div>
+        <div className="flex items-center justify-between">
+          <div className="text-green-800 font-medium">Result</div>
+          <button
+            onClick={() => handleReset(componentId)}
+            className="text-green-600 hover:text-green-800 text-sm underline"
+          >
+            Recalculate
+          </button>
+        </div>
         <div className="text-green-700 text-lg font-semibold mt-1">{result.solution}</div>
         {result.reasoning && (
           <div className="text-green-600 text-sm mt-2 whitespace-pre-wrap">{result.reasoning}</div>
@@ -387,7 +430,7 @@ export default function DynamicUIRenderer({
         </div>
       </div>
     );
-  }, [calculationResults]);
+  }, [calculationResults, handleReset]);
 
   /**
    * Renders a single component definition
