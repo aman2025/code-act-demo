@@ -100,7 +100,7 @@ export function validateComponentDefinition(definition) {
     return false;
   }
   
-  const allowedTypes = ['element', 'input', 'button', 'form'];
+  const allowedTypes = ['element', 'input', 'button', 'form', 'select', 'option'];
   if (!allowedTypes.includes(definition.type)) {
     return false;
   }
@@ -138,6 +138,10 @@ export function createReactElement(definition, index = 0) {
       return createButton(definition, key);
     case 'form':
       return createForm(definition, key);
+    case 'select':
+      return createSelect(definition, key);
+    case 'option':
+      return createOption(definition, key);
     default:
       return null;
   }
@@ -253,6 +257,63 @@ function createForm(definition, key) {
     onSubmit: (e) => e.preventDefault(), // Prevent default form submission
     ...sanitizedProps
   }, ...processedChildren);
+}
+
+/**
+ * Creates a select dropdown element
+ */
+function createSelect(definition, key) {
+  const { props = {}, options = [] } = definition;
+  const sanitizedProps = sanitizeProps(props);
+  
+  // Base classes for select styling
+  const baseClasses = 'border rounded px-3 py-2 focus:outline-none focus:ring-2 transition-colors bg-white';
+  const normalClasses = 'border-gray-300 focus:ring-blue-500 focus:border-blue-500';
+  const errorClasses = 'border-red-500 focus:ring-red-500 focus:border-red-500';
+  
+  // Check if this select has error styling (will be added by DynamicUIRenderer)
+  const hasError = sanitizedProps.className?.includes('border-red-500');
+  const validationClasses = hasError ? errorClasses : normalClasses;
+  
+  const finalClassName = `${baseClasses} ${validationClasses} ${sanitizedProps.className || ''}`.trim();
+  
+  // Preserve event handlers
+  const eventHandlers = {};
+  if (sanitizedProps.onChange) eventHandlers.onChange = sanitizedProps.onChange;
+  if (sanitizedProps.onFocus) eventHandlers.onFocus = sanitizedProps.onFocus;
+  if (sanitizedProps.onBlur) eventHandlers.onBlur = sanitizedProps.onBlur;
+  
+  // Create option elements
+  const optionElements = options.map((option, index) => {
+    if (option && option.type === 'option') {
+      return React.createElement('option', {
+        key: `option-${index}`,
+        value: option.value,
+        selected: option.selected
+      }, option.text);
+    }
+    return null;
+  }).filter(Boolean);
+  
+  return React.createElement('select', {
+    key,
+    className: finalClassName,
+    ...sanitizedProps,
+    ...eventHandlers
+  }, ...optionElements);
+}
+
+/**
+ * Creates an option element (used within select)
+ */
+function createOption(definition, key) {
+  const { value = '', text = '', selected = false } = definition;
+  
+  return React.createElement('option', {
+    key,
+    value: String(value),
+    selected: Boolean(selected)
+  }, String(text));
 }
 
 /**

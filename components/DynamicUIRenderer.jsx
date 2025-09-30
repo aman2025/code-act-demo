@@ -99,6 +99,10 @@ export default function DynamicUIRenderer({
           errors.push('Must be a valid phone number');
         }
         break;
+      case 'select':
+        // Select validation - value should be one of the allowed options
+        // This is typically handled by the browser, but we can add custom validation if needed
+        break;
     }
     
     // Required field validation
@@ -266,6 +270,24 @@ export default function DynamicUIRenderer({
           },
           value: currentValue,
           className: `${enhanced.props?.className || ''} ${hasError ? 'border-red-500 focus:ring-red-500' : ''}`.trim()
+        };
+        break;
+
+      case 'select':
+        const selectName = enhanced.props?.name;
+        const currentSelectValue = componentStates[componentId]?.[selectName] ?? enhanced.props?.value ?? '';
+        const hasSelectError = validationErrors[`${componentId}-${selectName}`]?.length > 0;
+        
+        enhanced.props = {
+          ...enhanced.props,
+          onChange: (e) => {
+            const { name, value } = e.target;
+            if (name) {
+              handleInputChange(componentId, name, value, 'select', enhanced.props);
+            }
+          },
+          value: currentSelectValue,
+          className: `${enhanced.props?.className || ''} ${hasSelectError ? 'border-red-500 focus:ring-red-500' : ''}`.trim()
         };
         break;
 

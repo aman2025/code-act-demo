@@ -31,6 +31,8 @@ Available safe functions for UI creation:
 - createInput(props) - Creates input fields (props: {name, type, placeholder, value})
 - createButton(props, text) - Creates buttons (props: {onClick})
 - createForm(props, children) - Creates forms
+- createSelect(props, options) - Creates select dropdowns (props: {name, value}, options: array of createOption)
+- createOption(value, text, selected) - Creates option elements for select dropdowns
 
 For calculations, use onClick handlers like 'calculateLoan', 'calculateArea', etc.
 
@@ -44,7 +46,12 @@ createForm({}, [
   createInput({name: 'principal', type: 'number', placeholder: 'Principal amount'}),
   createInput({name: 'rate', type: 'number', placeholder: 'Annual interest rate (%)'}),
   createInput({name: 'time', type: 'number', placeholder: 'Time (years)'}),
-  createInput({name: 'frequency', type: 'number', placeholder: 'Compounding frequency per year'}),
+  createSelect({name: 'frequency'}, [
+    createOption('1', 'Annually'),
+    createOption('2', 'Semi-annually'),
+    createOption('4', 'Quarterly'),
+    createOption('12', 'Monthly')
+  ]),
   createButton({onClick: 'calculateCompoundInterest'}, 'Calculate'),
   createElement('div', {id: 'result'}, ['Result will appear here'])
 ])

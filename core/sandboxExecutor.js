@@ -101,6 +101,30 @@ class SandboxExecutor {
           children: sanitizedChildren,
           id: this.generateId()
         };
+      },
+
+      createSelect: (props = {}, options = []) => {
+        // Validate and sanitize select props
+        const sanitizedProps = this.sanitizeProps(props);
+
+        // Validate and sanitize options
+        const sanitizedOptions = this.sanitizeSelectOptions(options);
+
+        return {
+          type: 'select',
+          props: sanitizedProps,
+          options: sanitizedOptions,
+          id: this.generateId()
+        };
+      },
+
+      createOption: (value, text, selected = false) => {
+        return {
+          type: 'option',
+          value: String(value),
+          text: String(text),
+          selected: Boolean(selected)
+        };
       }
     };
   }
@@ -166,6 +190,36 @@ class SandboxExecutor {
   }
 
   /**
+   * Sanitize select options array
+   */
+  sanitizeSelectOptions(options) {
+    if (!Array.isArray(options)) {
+      return [];
+    }
+
+    return options.map(option => {
+      if (typeof option === 'string' || typeof option === 'number') {
+        // Simple value - use as both value and text
+        return {
+          type: 'option',
+          value: String(option),
+          text: String(option),
+          selected: false
+        };
+      } else if (option && typeof option === 'object') {
+        // Object with value/text properties
+        return {
+          type: 'option',
+          value: String(option.value || option.text || ''),
+          text: String(option.text || option.value || ''),
+          selected: Boolean(option.selected)
+        };
+      }
+      return null;
+    }).filter(Boolean); // Remove null entries
+  }
+
+  /**
    * Generate unique ID for components
    */
   generateId() {
@@ -214,14 +268,16 @@ class SandboxExecutor {
         // Fallback to Function constructor (less secure but works)
         console.warn('Using fallback execution - VM2 not available');
         const safeFunctions = this.getSafeFunctions();
-        const { createElement, createInput, createButton, createForm } = safeFunctions;
-
+        
         // Create a safe execution context
+        const { createElement, createInput, createButton, createForm, createSelect, createOption } = safeFunctions;
         const safeContext = {
           createElement,
           createInput,
           createButton,
           createForm,
+          createSelect,
+          createOption,
           console: {
             log: () => { }, // Disable console output
             error: () => { },
@@ -231,7 +287,7 @@ class SandboxExecutor {
 
         // Execute the code in a controlled way
         const func = new Function(
-          'createElement', 'createInput', 'createButton', 'createForm', 'console',
+          'createElement', 'createInput', 'createButton', 'createForm', 'createSelect', 'createOption', 'console',
           `return (${code});`
         );
 
@@ -240,6 +296,8 @@ class SandboxExecutor {
           safeContext.createInput,
           safeContext.createButton,
           safeContext.createForm,
+          safeContext.createSelect,
+          safeContext.createOption,
           safeContext.console
         );
       }
@@ -331,7 +389,7 @@ class SandboxExecutor {
       throw new Error('Invalid component definition');
     }
 
-    const allowedTypes = ['element', 'input', 'button', 'form'];
+    const allowedTypes = ['element', 'input', 'button', 'form', 'select', 'option'];
     if (!allowedTypes.includes(component.type)) {
       throw new Error(`Invalid component type: ${component.type}`);
     }
