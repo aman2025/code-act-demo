@@ -6,6 +6,22 @@ The AI-Chat Dynamic UI application is a Next.js 14 web application that enables 
 
 The architecture follows a clear separation between the chat interface, AI integration, secure code execution, and dynamic UI rendering, ensuring both security and extensibility.
 
+### Core Features
+
+- **Conversational Interface**: Chat-based interaction for asking mathematical questions
+- **Dynamic UI Generation**: AI creates interactive forms, calculators, and input components
+- **Secure Code Execution**: VM2 sandbox ensures safe execution of AI-generated code
+- **Real-time Calculations**: Interactive components perform calculations with user inputs
+- **State Persistence**: Component states are maintained across interactions
+
+### User Flow
+
+1. User asks a mathematical question (e.g., "Create a loan calculator")
+2. AI generates both explanatory text and interactive UI components
+3. User interacts with generated forms and calculators
+4. System processes calculations and displays results inline
+5. Component states persist for continued interaction
+
 ## Architecture
 
 ### High-Level Architecture
