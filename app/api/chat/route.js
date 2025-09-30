@@ -54,7 +54,10 @@ export async function POST(request) {
       const executionResult = await sandboxExecutor.executeCode(aiResponse.uiCode);
 
       if (executionResult.success) {
-        response.uiComponents = executionResult.result;
+        // Wrap single component in array for frontend compatibility
+        response.uiComponents = Array.isArray(executionResult.result) 
+          ? executionResult.result 
+          : [executionResult.result];
       } else {
         // If sandbox execution fails, still return the reasoning but with error info
         response.uiComponents = null;

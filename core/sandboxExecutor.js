@@ -1,10 +1,23 @@
 /**
  * Secure sandbox executor for AI-generated UI code
- * Uses a simple evaluation approach with restricted access
+ * Uses VM2 to safely execute code with restricted access
  */
 class SandboxExecutor {
   constructor() {
     this.executionTimeout = 5000; // 5 seconds
+    this.memoryLimit = 32 * 1024 * 1024; // 32MB
+    this.VM = null;
+  }
+
+  /**
+   * Dynamically import VM2 when needed
+   */
+  async getVM() {
+    if (!this.VM) {
+      const { VM } = await import('vm2');
+      this.VM = VM;
+    }
+    return this.VM;
   }
 
   /**
@@ -21,7 +34,7 @@ class SandboxExecutor {
 
         // Sanitize props
         const sanitizedProps = this.sanitizeProps(props);
-        
+
         // Ensure children is an array
         const sanitizedChildren = Array.isArray(children) ? children : [children];
 
@@ -38,7 +51,7 @@ class SandboxExecutor {
         // Validate input props
         const allowedTypes = ['text', 'number', 'email', 'password', 'tel', 'url'];
         const inputType = props.type || 'text';
-        
+
         if (!allowedTypes.includes(inputType)) {
           throw new Error(`Invalid input type: ${inputType}`);
         }
@@ -55,7 +68,7 @@ class SandboxExecutor {
       createButton: (props = {}, text = '') => {
         // Sanitize button props
         const sanitizedProps = this.sanitizeProps(props);
-        
+
         // Ensure text is a string
         const buttonText = typeof text === 'string' ? text : String(text);
 
@@ -70,7 +83,7 @@ class SandboxExecutor {
       createForm: (props = {}, children = []) => {
         // Sanitize form props
         const sanitizedProps = this.sanitizeProps(props);
-        
+
         // Ensure children is an array
         const sanitizedChildren = Array.isArray(children) ? children : [children];
 
@@ -94,7 +107,7 @@ class SandboxExecutor {
 
     const sanitized = {};
     const allowedProps = [
-      'id', 'className', 'style', 'name', 'value', 'placeholder', 
+      'id', 'className', 'style', 'name', 'value', 'placeholder',
       'disabled', 'required', 'min', 'max', 'step', 'title', 'type'
     ];
 
@@ -122,12 +135,12 @@ class SandboxExecutor {
    */
   sanitizeInputProps(props) {
     const sanitized = this.sanitizeProps(props);
-    
+
     // Ensure type is preserved for inputs
     if (props.type) {
       sanitized.type = props.type;
     }
-    
+
     // Additional input-specific validations
     if (sanitized.type === 'number') {
       if (sanitized.min !== undefined) {
@@ -152,7 +165,7 @@ class SandboxExecutor {
   }
 
   /**
-   * Execute AI-generated code safely using Function constructor
+   * Execute AI-generated code safely in VM2 sandbox
    */
   async executeCode(code) {
     try {
@@ -164,39 +177,34 @@ class SandboxExecutor {
       // Check for potentially dangerous patterns
       this.validateCodeSafety(code);
 
-      // Create safe execution context
-      const safeFunctions = this.getSafeFunctions();
-      
-      // Create a function with the safe functions in scope
-      const functionBody = `
-        const { createElement, createInput, createButton, createForm } = arguments[0];
-        return (${code});
-      `;
-      
-      // Execute with timeout
-      const executeWithTimeout = () => {
-        return new Promise((resolve, reject) => {
-          const timeout = setTimeout(() => {
-            reject(new Error('Execution timeout'));
-          }, this.executionTimeout);
-          
-          try {
-            const func = new Function(functionBody);
-            const result = func(safeFunctions);
-            clearTimeout(timeout);
-            resolve(result);
-          } catch (error) {
-            clearTimeout(timeout);
-            reject(error);
-          }
-        });
-      };
+      // Get VM2 class dynamically
+      const VM = await this.getVM();
 
-      const result = await executeWithTimeout();
-      
+      // Create VM2 instance with security restrictions
+      const vm = new VM({
+        timeout: this.executionTimeout,
+        sandbox: {
+          ...this.getSafeFunctions(),
+          // Add some basic utilities
+          console: {
+            log: () => { }, // Disable console output
+            error: () => { },
+            warn: () => { }
+          }
+        },
+        // Security settings
+        wasm: false,
+        fixAsync: false,
+        eval: false,
+        require: false
+      });
+
+      // Execute the code and return result
+      const result = vm.run(code);
+
       // Validate the result
       this.validateResult(result);
-      
+
       return {
         success: true,
         result: result,
@@ -205,7 +213,7 @@ class SandboxExecutor {
 
     } catch (error) {
       console.error('Sandbox execution error:', error);
-      
+
       return {
         success: false,
         result: null,
