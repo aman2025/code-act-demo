@@ -69,63 +69,6 @@ export default function DynamicUIRenderer({
   }, []);
 
   /**
-   * Handles input changes in generated components with validation
-   */
-  const handleInputChange = useCallback((componentId, name, value, type, props = {}) => {
-    // Update component state
-    const newState = {
-      ...componentStates[componentId],
-      [name]: value
-    };
-    
-    setComponentStates(prev => ({
-      ...prev,
-      [componentId]: newState
-    }));
-    
-    // Update global UI state for persistence
-    updateUIState(`${messageId}-${componentId}`, newState);
-    
-    // Validate input
-    const errors = validateInput(name, value, type, props);
-    setValidationErrors(prev => ({
-      ...prev,
-      [`${componentId}-${name}`]: errors
-    }));
-    
-    // Clear previous calculation results when inputs change
-    if (calculationResults[componentId]) {
-      setCalculationResults(prev => ({
-        ...prev,
-        [componentId]: null
-      }));
-    }
-    
-    // Auto-calculate with debouncing if enabled and all required fields are filled
-    if (autoCalculateEnabled && onInteraction) {
-      // Clear existing timeout
-      if (debounceTimeouts.current[componentId]) {
-        clearTimeout(debounceTimeouts.current[componentId]);
-      }
-      
-      // Set new timeout for auto-calculation
-      debounceTimeouts.current[componentId] = setTimeout(() => {
-        const validation = validateComponent(componentId);
-        if (validation.isValid) {
-          // Check if we have meaningful values (not just empty strings)
-          const hasValues = Object.values(newState).some(val => 
-            val !== null && val !== undefined && val.toString().trim() !== ''
-          );
-          
-          if (hasValues) {
-            handleButtonClick(componentId, 'calculate');
-          }
-        }
-      }, 1500); // 1.5 second delay
-    }
-  }, [componentStates, updateUIState, validateInput, calculationResults, autoCalculateEnabled, onInteraction, validateComponent, handleButtonClick]);
-
-  /**
    * Validates all inputs in a component before calculation
    */
   const validateComponent = useCallback((componentId) => {
@@ -195,6 +138,63 @@ export default function DynamicUIRenderer({
       setIsCalculating(false);
     }
   }, [componentStates, onInteraction, messageId, validateComponent]);
+
+  /**
+   * Handles input changes in generated components with validation
+   */
+  const handleInputChange = useCallback((componentId, name, value, type, props = {}) => {
+    // Update component state
+    const newState = {
+      ...componentStates[componentId],
+      [name]: value
+    };
+    
+    setComponentStates(prev => ({
+      ...prev,
+      [componentId]: newState
+    }));
+    
+    // Update global UI state for persistence
+    updateUIState(`${messageId}-${componentId}`, newState);
+    
+    // Validate input
+    const errors = validateInput(name, value, type, props);
+    setValidationErrors(prev => ({
+      ...prev,
+      [`${componentId}-${name}`]: errors
+    }));
+    
+    // Clear previous calculation results when inputs change
+    if (calculationResults[componentId]) {
+      setCalculationResults(prev => ({
+        ...prev,
+        [componentId]: null
+      }));
+    }
+    
+    // Auto-calculate with debouncing if enabled and all required fields are filled
+    if (autoCalculateEnabled && onInteraction) {
+      // Clear existing timeout
+      if (debounceTimeouts.current[componentId]) {
+        clearTimeout(debounceTimeouts.current[componentId]);
+      }
+      
+      // Set new timeout for auto-calculation
+      debounceTimeouts.current[componentId] = setTimeout(() => {
+        const validation = validateComponent(componentId);
+        if (validation.isValid) {
+          // Check if we have meaningful values (not just empty strings)
+          const hasValues = Object.values(newState).some(val => 
+            val !== null && val !== undefined && val.toString().trim() !== ''
+          );
+          
+          if (hasValues) {
+            handleButtonClick(componentId, 'calculate');
+          }
+        }
+      }, 1500); // 1.5 second delay
+    }
+  }, [componentStates, updateUIState, validateInput, calculationResults, autoCalculateEnabled, onInteraction, validateComponent, handleButtonClick]);
 
   /**
    * Enhances component definitions with event handlers and validation

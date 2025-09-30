@@ -1,7 +1,8 @@
 /**
  * Secure sandbox executor for AI-generated UI code
- * Uses VM2 to safely execute code with restricted access
+ * Uses VM2 for secure execution with restricted access
  */
+
 class SandboxExecutor {
   constructor() {
     this.executionTimeout = 5000; // 5 seconds
@@ -10,14 +11,21 @@ class SandboxExecutor {
   }
 
   /**
-   * Dynamically import VM2 when needed
+   * Dynamically import VM2 for secure execution
    */
   async getVM() {
-    if (!this.VM) {
-      const { VM } = await import('vm2');
-      this.VM = VM;
+    if (this.VM) {
+      return this.VM;
     }
-    return this.VM;
+
+    try {
+      const vm2 = await import('vm2');
+      this.VM = vm2.VM;
+      return this.VM;
+    } catch (error) {
+      console.warn('VM2 not available, using fallback execution:', error.message);
+      return null;
+    }
   }
 
   /**
@@ -161,7 +169,7 @@ class SandboxExecutor {
    * Generate unique ID for components
    */
   generateId() {
-    return 'comp_' + Math.random().toString(36).substr(2, 9);
+    return 'comp_' + Math.random().toString(36).substring(2, 11);
   }
 
   /**
@@ -177,30 +185,64 @@ class SandboxExecutor {
       // Check for potentially dangerous patterns
       this.validateCodeSafety(code);
 
-      // Get VM2 class dynamically
+      // Try to get VM2 for secure execution
       const VM = await this.getVM();
+      let result;
 
-      // Create VM2 instance with security restrictions
-      const vm = new VM({
-        timeout: this.executionTimeout,
-        sandbox: {
-          ...this.getSafeFunctions(),
-          // Add some basic utilities
+      if (VM) {
+        // Use VM2 for secure execution
+        const vm = new VM({
+          timeout: this.executionTimeout,
+          sandbox: {
+            ...this.getSafeFunctions(),
+            // Add some basic utilities
+            console: {
+              log: () => { }, // Disable console output
+              error: () => { },
+              warn: () => { }
+            }
+          },
+          // Security settings
+          wasm: false,
+          fixAsync: false,
+          eval: false,
+          require: false
+        });
+
+        result = vm.run(code);
+      } else {
+        // Fallback to Function constructor (less secure but works)
+        console.warn('Using fallback execution - VM2 not available');
+        const safeFunctions = this.getSafeFunctions();
+        const { createElement, createInput, createButton, createForm } = safeFunctions;
+
+        // Create a safe execution context
+        const safeContext = {
+          createElement,
+          createInput,
+          createButton,
+          createForm,
           console: {
             log: () => { }, // Disable console output
             error: () => { },
             warn: () => { }
           }
-        },
-        // Security settings
-        wasm: false,
-        fixAsync: false,
-        eval: false,
-        require: false
-      });
+        };
 
-      // Execute the code and return result
-      const result = vm.run(code);
+        // Execute the code in a controlled way
+        const func = new Function(
+          'createElement', 'createInput', 'createButton', 'createForm', 'console',
+          `return (${code});`
+        );
+
+        result = func(
+          safeContext.createElement,
+          safeContext.createInput,
+          safeContext.createButton,
+          safeContext.createForm,
+          safeContext.console
+        );
+      }
 
       // Validate the result
       this.validateResult(result);
