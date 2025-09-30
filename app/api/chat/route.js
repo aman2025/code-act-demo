@@ -1,15 +1,13 @@
-import aiService from '../../../core/aiService.js';
-import SandboxExecutor from '../../../core/sandboxExecutor.js';
-
 /**
  * POST /api/chat - Main chat API route
  * Handles user messages, integrates with AI service, and executes UI code safely
  */
 export async function POST(request) {
+  console.log("Chat API called");
   try {
     // Parse request body
     const body = await request.json();
-    const { message, context } = body;
+    const { message } = body;
 
     // Validate input
     if (!message || typeof message !== 'string') {
@@ -24,45 +22,12 @@ export async function POST(request) {
       );
     }
 
-    // Get AI response
-    const aiResponse = await aiService.generateResponse(message);
-
-    // Handle AI service errors
-    if (!aiResponse.success) {
-      return Response.json(
-        {
-          error: {
-            type: aiResponse.error.type,
-            message: aiResponse.error.message
-          }
-        },
-        { status: 500 }
-      );
-    }
-
-    // Prepare response object
+    // For now, return a simple response to test the route
     const response = {
-      reasoning: aiResponse.reasoning,
+      reasoning: `I received your message: "${message}". The AI service integration is temporarily simplified for testing.`,
       uiComponents: null,
-      hasUI: aiResponse.hasUI
+      hasUI: false
     };
-
-    // If there's UI code, execute it in sandbox
-    if (aiResponse.hasUI && aiResponse.uiCode) {
-      const sandboxExecutor = new SandboxExecutor();
-      const executionResult = await sandboxExecutor.executeCode(aiResponse.uiCode);
-
-      if (executionResult.success) {
-        response.uiComponents = executionResult.result;
-      } else {
-        // If sandbox execution fails, still return the reasoning but with error info
-        response.uiComponents = null;
-        response.sandboxError = {
-          type: executionResult.error.type,
-          message: executionResult.error.message
-        };
-      }
-    }
 
     return Response.json(response);
 

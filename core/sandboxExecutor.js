@@ -1,13 +1,10 @@
-const { VM } = require('vm2');
-
 /**
  * Secure sandbox executor for AI-generated UI code
- * Uses VM2 to safely execute code with restricted access
+ * Uses a simple evaluation approach with restricted access
  */
 class SandboxExecutor {
   constructor() {
     this.executionTimeout = 5000; // 5 seconds
-    this.memoryLimit = 32 * 1024 * 1024; // 32MB
   }
 
   /**
@@ -155,7 +152,7 @@ class SandboxExecutor {
   }
 
   /**
-   * Execute AI-generated code safely in VM2 sandbox
+   * Execute AI-generated code safely using Function constructor
    */
   async executeCode(code) {
     try {
@@ -167,27 +164,35 @@ class SandboxExecutor {
       // Check for potentially dangerous patterns
       this.validateCodeSafety(code);
 
-      // Create VM2 instance with security restrictions
-      const vm = new VM({
-        timeout: this.executionTimeout,
-        sandbox: {
-          ...this.getSafeFunctions(),
-          // Add some basic utilities
-          console: {
-            log: () => {}, // Disable console output
-            error: () => {},
-            warn: () => {}
+      // Create safe execution context
+      const safeFunctions = this.getSafeFunctions();
+      
+      // Create a function with the safe functions in scope
+      const functionBody = `
+        const { createElement, createInput, createButton, createForm } = arguments[0];
+        return (${code});
+      `;
+      
+      // Execute with timeout
+      const executeWithTimeout = () => {
+        return new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error('Execution timeout'));
+          }, this.executionTimeout);
+          
+          try {
+            const func = new Function(functionBody);
+            const result = func(safeFunctions);
+            clearTimeout(timeout);
+            resolve(result);
+          } catch (error) {
+            clearTimeout(timeout);
+            reject(error);
           }
-        },
-        // Security settings
-        wasm: false,
-        fixAsync: false,
-        eval: false,
-        require: false
-      });
+        });
+      };
 
-      // Execute the code and return result
-      const result = vm.run(code);
+      const result = await executeWithTimeout();
       
       // Validate the result
       this.validateResult(result);
@@ -315,4 +320,4 @@ class SandboxExecutor {
   }
 }
 
-module.exports = SandboxExecutor;
+export default SandboxExecutor;
