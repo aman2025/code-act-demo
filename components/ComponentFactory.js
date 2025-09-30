@@ -8,16 +8,18 @@ import React from 'react';
 export function sanitizeProps(props = {}) {
   const sanitized = {};
   const allowedProps = [
-    'id', 'className', 'style', 'placeholder', 'type', 'name', 'value', 
+    'id', 'className', 'placeholder', 'type', 'name', 'value', 
     'min', 'max', 'step', 'required', 'disabled', 'readOnly', 'pattern',
-    'minLength', 'maxLength', 'title', 'autoComplete', 'inputMode'
+    'minLength', 'maxLength', 'title', 'autoComplete', 'inputMode',
+    // Event handlers - these are functions and safe to pass through
+    'onClick', 'onChange', 'onInput', 'onFocus', 'onBlur', 'onMouseDown', 'onMouseUp'
   ];
   
   // Only allow safe props
   Object.keys(props).forEach(key => {
-    if (allowedProps.includes(key)) {
-      // Additional sanitization for specific props
-      if (key === 'style' && typeof props[key] === 'object') {
+    // Handle style prop separately (not in allowedProps list)
+    if (key === 'style') {
+      if (typeof props[key] === 'object' && props[key] !== null) {
         // Only allow safe CSS properties
         const safeStyles = {};
         const allowedStyles = ['color', 'backgroundColor', 'fontSize', 'fontWeight', 'margin', 'padding', 'width', 'height'];
@@ -27,7 +29,12 @@ export function sanitizeProps(props = {}) {
           }
         });
         sanitized[key] = safeStyles;
-      } else if (key === 'className' && typeof props[key] === 'string') {
+      }
+      // If style is a string or invalid, skip it (don't add to sanitized)
+      // React expects style to be an object, not a string
+    } else if (allowedProps.includes(key)) {
+      // Additional sanitization for specific props
+      if (key === 'className' && typeof props[key] === 'string') {
         // Allow only alphanumeric, hyphens, spaces, and colons for class names (for Tailwind)
         sanitized[key] = props[key].replace(/[^a-zA-Z0-9\s\-_:]/g, '');
       } else if (key === 'pattern' && typeof props[key] === 'string') {
@@ -38,6 +45,9 @@ export function sanitizeProps(props = {}) {
         } catch (e) {
           console.warn('Invalid regex pattern ignored:', props[key]);
         }
+      } else if (key.startsWith('on') && typeof props[key] === 'function') {
+        // Event handlers - pass through functions as-is
+        sanitized[key] = props[key];
       } else {
         sanitized[key] = props[key];
       }
@@ -176,10 +186,18 @@ function createInput(definition, key) {
   
   const finalClassName = `${baseClasses} ${validationClasses} ${sanitizedProps.className || ''}`.trim();
   
+  // Preserve event handlers - these are critical for interactivity
+  const eventHandlers = {};
+  if (sanitizedProps.onChange) eventHandlers.onChange = sanitizedProps.onChange;
+  if (sanitizedProps.onInput) eventHandlers.onInput = sanitizedProps.onInput;
+  if (sanitizedProps.onFocus) eventHandlers.onFocus = sanitizedProps.onFocus;
+  if (sanitizedProps.onBlur) eventHandlers.onBlur = sanitizedProps.onBlur;
+  
   return React.createElement('input', {
     key,
     className: finalClassName,
-    ...sanitizedProps
+    ...sanitizedProps,
+    ...eventHandlers
   });
 }
 
@@ -200,11 +218,18 @@ function createButton(definition, key) {
   const stateClasses = sanitizedProps.disabled ? disabledClasses : enabledClasses;
   const finalClassName = `${baseClasses} ${stateClasses} ${sanitizedProps.className || ''}`.trim();
   
+  // Preserve event handlers - critical for button functionality
+  const eventHandlers = {};
+  if (sanitizedProps.onClick) eventHandlers.onClick = sanitizedProps.onClick;
+  if (sanitizedProps.onMouseDown) eventHandlers.onMouseDown = sanitizedProps.onMouseDown;
+  if (sanitizedProps.onMouseUp) eventHandlers.onMouseUp = sanitizedProps.onMouseUp;
+  
   return React.createElement('button', {
     key,
     className: finalClassName,
     type: 'button',
-    ...sanitizedProps
+    ...sanitizedProps,
+    ...eventHandlers
   }, text);
 }
 

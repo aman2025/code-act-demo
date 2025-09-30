@@ -27,6 +27,47 @@ export default function DynamicUIRenderer({
   // Refs for debouncing
   const debounceTimeouts = useRef({});
 
+  // Initialize component states from store on mount
+  useEffect(() => {
+    if (components && components.length > 0) {
+      const initialStates = {};
+      
+      components.forEach((component, index) => {
+        const componentId = `component-${index}`;
+        
+        // First check if we have stored state
+        const storedState = getUIState(`${messageId}-${componentId}`);
+        if (storedState) {
+          initialStates[componentId] = storedState;
+        } else {
+          // Initialize with default values from AI response
+          const defaultState = {};
+          const extractDefaults = (comp) => {
+            if (comp.type === 'input' && comp.props?.name && comp.props?.value) {
+              defaultState[comp.props.name] = comp.props.value;
+            }
+            if (comp.children && Array.isArray(comp.children)) {
+              comp.children.forEach(child => {
+                if (typeof child === 'object') {
+                  extractDefaults(child);
+                }
+              });
+            }
+          };
+          extractDefaults(component);
+          
+          if (Object.keys(defaultState).length > 0) {
+            initialStates[componentId] = defaultState;
+          }
+        }
+      });
+      
+      if (Object.keys(initialStates).length > 0) {
+        setComponentStates(initialStates);
+      }
+    }
+  }, [components, messageId, getUIState]);
+
   /**
    * Validates input value based on type and constraints
    */
@@ -211,7 +252,8 @@ export default function DynamicUIRenderer({
       case 'input':
         const inputName = enhanced.props?.name;
         const inputType = enhanced.props?.type || 'text';
-        const currentValue = componentStates[componentId]?.[inputName] || '';
+        // Use stored value, or fall back to the original value from AI, or empty string
+        const currentValue = componentStates[componentId]?.[inputName] ?? enhanced.props?.value ?? '';
         const hasError = validationErrors[`${componentId}-${inputName}`]?.length > 0;
         
         enhanced.props = {
@@ -241,14 +283,12 @@ export default function DynamicUIRenderer({
             }
             handleButtonClick(componentId, action);
           },
-          disabled: isCalculating || !validation.isValid
+          disabled: isCalculating // Remove validation check to allow initial clicks
         };
         
         // Update button text based on state
         if (isCalculating && enhanced.text) {
           enhanced.text = 'Calculating...';
-        } else if (!validation.isValid && enhanced.text) {
-          enhanced.text = enhanced.text; // Keep original text but button is disabled
         }
         break;
 
