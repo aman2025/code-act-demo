@@ -94,4 +94,4 @@ The system now supports two API endpoints:
 - **Zustand**: Lightweight state management for chat and UI state
 - **Tailwind CSS + Shadcn/ui**: Styling and pre-built components
 - **VM2**: Secure JavaScript sandbox for AI-generated code execution
-- **Mistral API**: LLM integration for intelligent responses
+- **Mistral API**: LLM integration for intelligent responses 
