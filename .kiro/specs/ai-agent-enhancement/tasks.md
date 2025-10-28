@@ -1,95 +1,72 @@
 # Implementation Plan
 
-- [ ] 1. Set up core agent infrastructure and base classes
-  - Create base agent controller class with initialization and query processing methods
-  - Implement agent context data structure for maintaining state across iterations
-  - Create base tool interface and abstract tool class for consistent tool implementation
-  - _Requirements: 7.1, 7.4, 7.5_
+- [ ] 1. Create core agent loop infrastructure
+  - Implement main agent controller with LLM-driven decision making loop
+  - Create agent state management for tracking progress across iterations
+  - Add stopping conditions including maximum iterations and completion detection
+  - _Requirements: 1.1, 4.4, 7.1, 7.4_
 
-- [ ] 2. Implement preset calculation tools
-- [ ] 2.1 Create area calculator tool with geometric shape support
-  - Implement AreaCalculator class with methods for triangle, rectangle, and circle calculations
-  - Add parameter validation and error handling for geometric inputs
-  - _Requirements: 2.1, 2.2, 5.2_
+- [ ] 2. Build environment interaction system (Tools)
+- [ ] 2.1 Create tool execution environment with ground truth feedback
+  - Implement tool registry for managing available tools and their documentation
+  - Create tool execution wrapper that captures results as environmental feedback
+  - Add tool result validation to ensure ground truth from environment
+  - _Requirements: 5.1, 5.2, 5.3, 5.4_
 
-- [ ] 2.2 Create percentage calculator tool
-  - Implement PercentageCalculator class with percentage calculation methods
-  - Add validation for numerical inputs and division by zero handling
-  - _Requirements: 2.1, 2.2, 5.2_
+- [ ] 2.2 Implement preset calculation tools
+  - Create AreaCalculator tool with triangle, rectangle, and circle calculations
+  - Create PercentageCalculator tool for percentage operations
+  - Create mock WeatherService and FlightService tools with simulated responses
+  - _Requirements: 2.1, 2.2, 2.3_
 
-- [ ] 2.3 Create mock service tools for weather and flight data
-  - Implement WeatherService and FlightService classes with simulated responses
-  - Create realistic mock data structures and response formats
-  - _Requirements: 2.1, 2.3, 5.2_
+- [ ] 3. Implement LLM-based reasoning and planning
+- [ ] 3.1 Create agent prompting system for autonomous decision making
+  - Design prompts that enable LLM to understand complex inputs and engage in reasoning
+  - Implement planning capabilities where agent can break down tasks into steps
+  - Add tool selection logic based on environmental context and available tools
+  - _Requirements: 1.1, 1.2, 1.3, 6.1, 6.2_
 
-- [ ] 3. Build tool registry system
-- [ ] 3.1 Implement tool registry with registration and discovery methods
-  - Create ToolRegistry class with tool registration, retrieval, and validation methods
-  - Implement tool categorization and search functionality
-  - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5_
-
-- [ ] 3.2 Create tool validation and parameter schema system
-  - Implement parameter schema validation for tool inputs
-  - Add tool definition validation and error reporting
-  - _Requirements: 5.2, 5.3_
-
-- [ ] 4. Implement ReAct loop engine
-- [ ] 4.1 Create ReAct engine with reasoning and action cycle
-  - Implement ReActEngine class with iteration management and termination logic
-  - Create reasoning generation and action selection methods
-  - _Requirements: 1.1, 1.2, 1.3, 4.4, 6.1, 6.2_
-
-- [ ] 4.2 Implement observation generator for feedback processing
-  - Create ObservationGenerator class for converting tool results to observations
-  - Implement different observation types for success, error, and progress feedback
-  - _Requirements: 3.1, 3.2, 3.3, 4.1, 4.2_
-
-- [ ] 4.3 Add iteration control and termination conditions
-  - Implement maximum iteration limits and early termination logic
-  - Create confidence-based and solution-found termination conditions
-  - _Requirements: 4.4, 4.5_
-
-- [ ] 5. Enhance AI service for agent integration
-- [ ] 5.1 Extend existing AI service with agent-specific prompting
-  - Create enhanced prompts for ReAct reasoning and tool selection
-  - Implement structured response parsing for agent decisions
-  - _Requirements: 1.1, 1.2, 6.1, 6.2, 6.3_
-
-- [ ] 5.2 Add tool selection and reasoning response parsing
-  - Implement parsing logic for tool selection from LLM responses
-  - Create structured reasoning extraction and validation
+- [ ] 3.2 Add structured response parsing for agent actions
+  - Implement parsing logic to extract tool calls and reasoning from LLM responses
+  - Create action validation to ensure reliable tool usage
+  - Add fallback mechanisms when LLM responses are unclear or invalid
   - _Requirements: 1.1, 6.2, 6.4_
 
-- [ ] 6. Implement error handling and recovery system
-- [ ] 6.1 Create comprehensive error categorization and handling
-  - Implement error type classification and recovery strategies
-  - Create error-to-observation conversion for ReAct loop integration
+- [ ] 4. Build environmental feedback loop
+- [ ] 4.1 Create observation system for environmental ground truth
+  - Implement observation generator that converts tool results into structured feedback
+  - Create feedback integration that informs the next LLM decision cycle
+  - Add progress assessment based on environmental responses
+  - _Requirements: 4.1, 4.2, 4.3, 6.5_
+
+- [ ] 4.2 Implement error recovery through environmental feedback
+  - Create error detection from tool execution failures
+  - Implement recovery strategies where agent learns from environmental feedback
+  - Add adaptive behavior when tools fail or return unexpected results
   - _Requirements: 3.1, 3.2, 3.3, 3.4_
 
-- [ ] 6.2 Add strategy adaptation for error recovery
-  - Implement alternative tool selection when primary tools fail
-  - Create graceful degradation paths for unrecoverable errors
-  - _Requirements: 3.4, 4.1, 4.2_
+- [ ] 5. Add autonomous operation with human checkpoints
+- [ ] 5.1 Implement independent agent operation
+  - Create autonomous execution mode where agent operates without human intervention
+  - Add decision-making logic for when to continue vs when to seek human input
+  - Implement task completion detection and autonomous termination
+  - _Requirements: 1.4, 4.4, 4.5_
 
-- [ ] 7. Integrate agent system with existing API endpoints
-- [ ] 7.1 Modify chat API route to support agent mode
-  - Update /api/chat endpoint to detect and route agent-capable queries
-  - Maintain backward compatibility with existing chat functionality
-  - _Requirements: 1.1, 1.4, 7.1, 7.2_
+- [ ] 5.2 Create human interaction points for guidance and feedback
+  - Add checkpoint system where agent can pause for human feedback
+  - Implement blocker detection when agent encounters problems it cannot solve
+  - Create clear communication of agent reasoning and progress to humans
+  - _Requirements: 6.3, 6.4, 6.5_
 
-- [ ] 7.2 Implement agent decision logic for tool calls vs existing UI generation
-  - Create logic for agent to decide when to use preset tools (return data only) vs delegate to existing UI generation system
-  - Integrate agent tool results with existing chat response format
-  - Ensure agent can leverage existing Dynamic UI Generation when tools are insufficient
-  - _Requirements: 1.1, 1.4, 6.4, 6.5_
+- [ ] 6. Integrate with existing system architecture
+- [ ] 6.1 Modify existing API to support agent mode
+  - Update /api/chat endpoint to detect agent-suitable queries vs UI generation requests
+  - Maintain backward compatibility with existing Dynamic UI Generation system
+  - Create routing logic between agent tools and existing UI component generation
+  - _Requirements: 1.4, 7.1, 7.2_
 
-- [ ] 8. Wire together complete agent workflow
-- [ ] 8.1 Connect all agent components in main controller
-  - Integrate ReAct engine, tool registry, and enhanced AI service in agent controller
-  - Implement complete query-to-response workflow with error handling
-  - _Requirements: 1.1, 1.2, 1.3, 1.4, 7.1, 7.2, 7.3_
-
-- [ ] 8.2 Add agent initialization and configuration
-  - Create agent startup sequence with tool registration and system validation
-  - Implement configuration options for iteration limits and behavior settings
-  - _Requirements: 5.4, 7.4, 7.5_
+- [ ] 6.2 Wire complete agent system with guardrails
+  - Connect LLM reasoning, tool execution, and feedback loops in main agent controller
+  - Implement cost controls and safety guardrails for autonomous operation
+  - Add comprehensive logging and monitoring for agent decision-making process
+  - _Requirements: 7.1, 7.2, 7.3, 7.5_
