@@ -77,10 +77,10 @@
   - Maintain backward compatibility with existing chat functionality
   - _Requirements: 1.1, 1.4, 7.1, 7.2_
 
-- [ ] 7.2 Create dual response system for tool calls vs UI generation
-  - Implement logic to distinguish between tool-only responses and UI component generation requests
-  - Create separate response paths: tool calls return data only, UI requests generate component structures
-  - Ensure agent can decide when to call tools (no UI) vs when to generate interactive components
+- [ ] 7.2 Implement agent decision logic for tool calls vs existing UI generation
+  - Create logic for agent to decide when to use preset tools (return data only) vs delegate to existing UI generation system
+  - Integrate agent tool results with existing chat response format
+  - Ensure agent can leverage existing Dynamic UI Generation when tools are insufficient
   - _Requirements: 1.1, 1.4, 6.4, 6.5_
 
 - [ ] 8. Wire together complete agent workflow
