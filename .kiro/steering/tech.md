@@ -1,55 +1,52 @@
-# Technology Stack & Build System
+# Technology Stack
 
 ## Framework & Runtime
+- **Next.js 14**: App router with API routes and server-side processing
+- **React 18**: Component-based UI with hooks for state management
+- **Node.js**: Server-side JavaScript runtime
 
-- **Next.js 14**: React framework with App Router for full-stack development
-- **React 18**: Component library with hooks and modern patterns
-- **Node.js**: Server-side runtime for API routes and AI integration
-
-## Key Dependencies
-
-### UI & Styling
-- **Tailwind CSS 4.x**: Utility-first CSS framework for styling
-- **Radix UI**: Headless component primitives for accessible UI
-- **Shadcn/ui**: Pre-built component system built on Radix
-- **class-variance-authority**: Type-safe component variants
-- **tailwind-merge**: Intelligent Tailwind class merging
-
-### State Management
+## Core Dependencies
+- **VM2**: Secure JavaScript sandbox for AI-generated code execution
 - **Zustand**: Lightweight state management for chat and UI state
-- **React Hooks**: Built-in state management for component-level state
+- **Tailwind CSS**: Utility-first CSS framework
+- **Radix UI**: Accessible component primitives (@radix-ui/react-*)
+- **class-variance-authority**: Component variant management
+- **tailwind-merge**: Tailwind class merging utility
 
-### AI & Security
+## AI & Processing
 - **Mistral API**: LLM integration for intelligent responses
-- **VM2**: Secure JavaScript sandbox for executing AI-generated code
-- **CoffeeScript**: Additional scripting language support
+- **CoffeeScript**: Alternative JavaScript syntax support
 
-### Development
-- **TypeScript**: Type safety and better developer experience
+## Development Tools
+- **TypeScript**: Type safety and development experience
 - **ESLint**: Code linting with Next.js configuration
-- **PostCSS**: CSS processing and optimization
+- **PostCSS**: CSS processing with Tailwind
 
-## Common Commands
+## Build & Development Commands
 
 ```bash
-# Development
-npm run dev          # Start development server on localhost:3000
-npm run build        # Build production application
-npm run start        # Start production server
-npm run lint         # Run ESLint code analysis
+# Development server
+npm run dev
 
-# Package Management
-npm install          # Install all dependencies
-npm ci              # Clean install from package-lock.json
+# Production build
+npm run build
+
+# Start production server
+npm start
+
+# Lint code
+npm run lint
 ```
 
-## Environment Setup
+## Architecture Patterns
+- **Component Factory Pattern**: Dynamic UI component creation
+- **Sandbox Execution**: Secure code execution with VM2
+- **Agent System**: Integrated AI agent with tool execution
+- **State Management**: Zustand for global state, React hooks for local state
+- **API Routes**: Next.js API routes for backend processing
 
-Required environment variables:
-- `MISTRAL_API_KEY`: API key for Mistral LLM integration
-
-## Build Configuration
-
-- **Webpack**: Custom configuration for VM2 and Node.js modules
-- **PostCSS**: Tailwind CSS processing with autoprefixer
-- **TypeScript**: Configured for Next.js with strict type checking
+## Security Considerations
+- VM2 sandbox for safe code execution
+- Props sanitization in dynamic components
+- Input validation and type checking
+- Webpack externals configuration for Node.js modules

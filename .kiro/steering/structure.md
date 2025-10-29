@@ -1,68 +1,74 @@
-# Project Structure & Organization
+# Project Structure
 
-## Directory Layout
+## Root Level
+- **package.json**: Dependencies and scripts
+- **next.config.js**: Next.js configuration with VM2 webpack externals
+- **tailwind.config.js**: Tailwind CSS configuration
+- **tsconfig.json**: TypeScript configuration
+- **.env**: Environment variables (API keys, etc.)
 
-```
-├── app/                    # Next.js App Router directory
-│   ├── api/               # API routes
-│   │   ├── chat/          # Main chat endpoint
-│   │   └── calculate/     # Calculation processing endpoint
-│   ├── globals.css        # Global styles and Tailwind imports
-│   ├── layout.jsx         # Root layout component
-│   └── page.jsx           # Home page component
-├── components/            # Reusable React components
-│   ├── ChatView.jsx       # Main chat interface
-│   ├── Messages.jsx       # Message display component
-│   ├── DynamicUIRenderer.jsx  # AI-generated component renderer
-│   └── ComponentFactory.js    # Safe component creation utilities
-├── core/                  # Core business logic
-│   ├── aiService.js       # Mistral API integration
-│   └── sandboxExecutor.js # VM2 code execution
-├── store/                 # State management
-│   └── chatStore.js       # Zustand store for chat state
-├── utils/                 # Utility functions
-│   └── cn.js             # Tailwind class merging utility
-└── .kiro/                # Kiro configuration
-    └── steering/         # AI assistant guidance documents
-```
+## Application Structure
 
-## Architectural Patterns
+### `/app` - Next.js App Router
+- **layout.jsx**: Root layout with global styles and metadata
+- **page.jsx**: Main chat interface page
+- **globals.css**: Global CSS styles and Tailwind imports
+- **api/**: API route handlers
+  - **chat/route.js**: Main chat processing endpoint
+  - **calculate/route.js**: Calculation processing endpoint
 
-### Component Organization
-- **Presentation Components**: UI-focused components in `/components`
-- **Business Logic**: Core functionality in `/core`
-- **API Layer**: Next.js API routes in `/app/api`
-- **State Management**: Centralized in `/store` using Zustand
+### `/components` - React Components
+- **ChatView.jsx**: Main chat interface component
+- **Messages.jsx**: Message display and management
+- **DynamicUIRenderer.jsx**: Renders AI-generated UI components
+- **ComponentFactory.js**: Factory for creating dynamic components
+- **README.md**: Component documentation and usage
 
-### File Naming Conventions
-- **Components**: PascalCase with `.jsx` extension (e.g., `ChatView.jsx`)
-- **Utilities**: camelCase with `.js` extension (e.g., `aiService.js`)
-- **API Routes**: `route.js` files in named directories
-- **Styles**: kebab-case for CSS files
+### `/core` - Agent System Architecture
+Core AI agent system with integrated tool execution:
+- **integratedAgentSystem.js**: Main system orchestrator
+- **agentController.js**: Agent reasoning and control logic
+- **agentState.js**: State management for agent operations
+- **enhancedAIService.js**: AI service with tool awareness
+- **toolManager.js**: Tool registration and execution
+- **toolExecutor.js**: Safe tool execution environment
+- **agentMonitoringSystem.js**: Performance and safety monitoring
+- **humanInteractionManager.js**: Human-in-the-loop integration
+- **errorRecoverySystem.js**: Error handling and recovery
 
-### Code Organization Principles
-- **Separation of Concerns**: UI, business logic, and data layers are distinct
-- **Single Responsibility**: Each module has a focused purpose
-- **Dependency Direction**: Components depend on stores, stores depend on services
-- **Security Isolation**: AI-generated code execution is sandboxed in `/core`
+### `/tools` - Executable Tools
+- **areaCalculator.js**: Geometric area calculations
+- **percentageCalculator.js**: Percentage calculations
+- **mockServices.js**: Mock external services for testing
 
-## Key Architectural Decisions
+### `/store` - State Management
+- **chatStore.js**: Zustand store for chat state and UI components
 
-### API Structure
-- `/api/chat`: Handles initial AI response generation and UI creation
-- `/api/calculate`: Processes user interactions with generated components
+### `/utils` - Utilities
+- **cn.js**: Tailwind class name utility function
 
-### State Management
-- **Global State**: Chat messages and UI component states in Zustand
-- **Local State**: Component-specific state using React hooks
-- **Persistence**: UI component values persist across interactions
+### `/docs` - Documentation
+- **autonomous-operation-guide.md**: Guide for autonomous agent operations
 
-### Security Model
-- **Sandboxed Execution**: VM2 isolates AI-generated code
-- **Input Validation**: All user inputs are validated before processing
-- **Safe Component Creation**: ComponentFactory ensures secure rendering
+### `/examples` - Usage Examples
+- **autonomousOperationDemo.js**: Demonstration of agent system usage
 
-### Styling Approach
-- **Utility-First**: Tailwind CSS for consistent styling
-- **Component Variants**: CVA for type-safe component variations
-- **Design System**: Shadcn/ui components for consistent UI patterns
+## File Naming Conventions
+- **React Components**: PascalCase with .jsx extension
+- **JavaScript Modules**: camelCase with .js extension
+- **API Routes**: route.js in named folders
+- **Configuration**: kebab-case or standard names (next.config.js)
+
+## Import Patterns
+- Use ES6 imports/exports throughout
+- Relative imports for local modules
+- Absolute imports for external packages
+- Component imports use .jsx extension explicitly
+
+## Architecture Layers
+1. **Presentation**: React components and UI rendering
+2. **API**: Next.js API routes for backend processing
+3. **Core**: Agent system and AI processing logic
+4. **Tools**: Executable utilities and calculators
+5. **State**: Global and local state management
+6. **Utils**: Shared utility functions

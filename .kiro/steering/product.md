@@ -2,28 +2,24 @@
 
 ## AI Chat Dynamic UI
 
-An AI-powered mathematical assistant that generates interactive UI components in response to user questions. The application combines conversational AI with dynamic component generation to create personalized calculators and tools.
+An intelligent Next.js application that combines conversational AI with dynamic UI generation. Users ask mathematical questions and receive both explanatory responses and interactive UI components like calculators, forms, and input widgets.
 
-### Core Features
+### Core Value Proposition
+- **Conversational Interface**: Natural language interaction for mathematical queries
+- **Dynamic UI Generation**: AI creates interactive components on-demand
+- **Secure Execution**: VM2 sandbox ensures safe code execution
+- **Real-time Calculations**: Interactive components perform live calculations
+- **Persistent State**: Component states maintained across interactions
 
-- **Conversational Interface**: Chat-based interaction for asking mathematical questions
-- **Dynamic UI Generation**: AI creates interactive forms, calculators, and input components
-- **Secure Code Execution**: VM2 sandbox ensures safe execution of AI-generated code
-- **Real-time Calculations**: Interactive components perform calculations with user inputs
-- **State Persistence**: Component states are maintained across interactions
-
-### User Flow
-
-1. User asks a mathematical question (e.g., "Create a loan calculator")
-2. AI generates both explanatory text and interactive UI components
-3. User interacts with generated forms and calculators
-4. System processes calculations and displays results inline
-5. Component states persist for continued interaction
+### Key Features
+- Mathematical question answering with interactive calculators
+- AI-generated forms and input components
+- Secure code execution environment
+- Real-time calculation processing
+- State management across chat sessions
 
 ### Target Use Cases
-
-- Mathematical education and learning
-- Financial calculations (loans, investments, compound interest)
-- Engineering calculations (area, volume, conversions)
-- Statistical analysis and data processing
-- Custom calculator generation for specific domains
+- Educational math tools and calculators
+- Interactive problem-solving interfaces
+- Dynamic form generation based on user needs
+- Mathematical exploration and learning
