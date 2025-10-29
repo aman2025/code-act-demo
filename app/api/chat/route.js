@@ -1,6 +1,6 @@
-import aiService from '../../../core/aiService.js';
 import SandboxExecutor from '../../../core/sandboxExecutor.js';
 import IntegratedAgentSystem from '../../../core/integratedAgentSystem.js';
+import EnhancedAIService from '../../../core/enhancedAIService.js';
 
 /**
  * POST /api/chat - Main chat API route
@@ -59,40 +59,58 @@ export async function POST(request) {
  * @returns {boolean} - Whether to use agent mode
  */
 function detectAgentSuitableQuery(message) {
+  const messageLower = message.toLowerCase();
+  
+  // Tool-specific keywords that should trigger agent mode (for direct calculations/queries)
+  const toolKeywords = [
+    'weather in', 'temperature in', 'forecast for', 'climate in',
+    'flight from', 'flights from', 'airline', 'airport', 'travel to',
+    'area of', 'what is the area', 'calculate area', 'find area',
+    'percentage of', 'percent of', 'what percentage', 'calculate percentage'
+  ];
+  
+  // UI generation keywords that should trigger UI mode
+  const uiKeywords = [
+    'create a calculator', 'build a calculator', 'make a calculator',
+    'create a triangle calculator', 'create a rectangle calculator', 'create a circle calculator',
+    'create an area calculator', 'build an area calculator', 'make an area calculator',
+    'triangle area calculator', 'rectangle area calculator', 'circle area calculator',
+    'generate a form', 'create a form', 'build a form',
+    'loan calculator', 'mortgage calculator', 'interest calculator',
+    'create an interface', 'build an interface', 'generate interface'
+  ];
+  
+  // Agent reasoning keywords
   const agentKeywords = [
     'analyze', 'research', 'investigate', 'compare', 'evaluate', 'assess',
     'explain why', 'what if', 'help me understand', 'break down',
-    'step by step', 'reasoning', 'logic', 'decision', 'strategy',
-    'multiple tools', 'complex problem', 'solve this problem'
+    'step by step', 'reasoning', 'logic', 'decision', 'strategy'
   ];
 
-  const uiKeywords = [
-    'calculator', 'form', 'input', 'button', 'create a', 'build a',
-    'make a', 'generate', 'calculate', 'compute', 'interface'
-  ];
-
-  const messageLower = message.toLowerCase();
-  
-  // Check for explicit agent indicators
-  const hasAgentKeywords = agentKeywords.some(keyword => messageLower.includes(keyword));
+  // Check for explicit UI generation requests first
   const hasUIKeywords = uiKeywords.some(keyword => messageLower.includes(keyword));
-  
-  // If both are present, prefer agent mode for complex queries
-  if (hasAgentKeywords && hasUIKeywords) {
-    return message.length > 50; // Longer queries likely need reasoning
+  if (hasUIKeywords) {
+    return false; // Use UI generation mode
   }
   
-  // If only agent keywords, use agent mode
-  if (hasAgentKeywords && !hasUIKeywords) {
-    return true;
+  // Check for tool-specific queries
+  const hasToolKeywords = toolKeywords.some(keyword => messageLower.includes(keyword));
+  if (hasToolKeywords) {
+    return true; // Use agent mode for tool execution
   }
   
-  // If only UI keywords, use UI mode
-  if (hasUIKeywords && !hasAgentKeywords) {
-    return false;
+  // Check for agent reasoning keywords
+  const hasAgentKeywords = agentKeywords.some(keyword => messageLower.includes(keyword));
+  if (hasAgentKeywords) {
+    return true; // Use agent mode for reasoning
   }
   
-  // For ambiguous cases, use query length and complexity as heuristic
+  // Default to UI mode for simple calculator requests
+  if (messageLower.includes('calculator') || messageLower.includes('calculate')) {
+    return false; // Use UI generation mode
+  }
+  
+  // For other cases, use query complexity as heuristic
   const isComplex = message.length > 100 || 
                    (message.includes('?') && message.split('?').length > 2) ||
                    message.includes(' and ') || 
@@ -238,8 +256,11 @@ async function handleAgentMode(message) {
  */
 async function handleUIGenerationMode(message) {
   try {
+    // Create enhanced AI service instance for UI generation
+    const enhancedAIService = new EnhancedAIService(null); // No tool registry needed for UI generation
+    
     // Get AI response
-    const aiResponse = await aiService.generateResponse(message);
+    const aiResponse = await enhancedAIService.generateResponse(message);
 
     // Handle AI service errors
     if (!aiResponse.success) {

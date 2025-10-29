@@ -3,13 +3,11 @@
  * Integrates prompting system and response parsing for autonomous agents
  */
 
-import aiService from './aiService.js';
 import AgentPromptingSystem from './agentPromptingSystem.js';
 import AgentResponseParser from './agentResponseParser.js';
 
 class EnhancedAIService {
   constructor(toolRegistry) {
-    this.baseAIService = aiService;
     this.promptingSystem = new AgentPromptingSystem(toolRegistry);
     this.responseParser = new AgentResponseParser();
     this.toolRegistry = toolRegistry;
@@ -463,6 +461,256 @@ class EnhancedAIService {
     if (config.temperatureSettings) {
       this.temperatureSettings = { ...this.temperatureSettings, ...config.temperatureSettings };
     }
+  }
+
+  // ===== LEGACY COMPATIBILITY METHODS =====
+  // These methods provide backward compatibility with the original aiService
+
+  /**
+   * Generate response for UI generation (legacy compatibility)
+   * @param {string} userMessage - User's mathematical question
+   * @returns {Promise<Object>} - Structured response with reasoning and UI code
+   */
+  async generateResponse(userMessage) {
+    try {
+      // Validate input
+      if (!userMessage || typeof userMessage !== 'string') {
+        throw new Error('Invalid user message provided');
+      }
+
+      // Create structured prompt for UI generation
+      const prompt = this.createUIGenerationPrompt(userMessage);
+
+      // Call Mistral API
+      const apiResponse = await this.callMistralWithRetry(prompt, {
+        temperature: 0.7,
+        maxTokens: 2000
+      });
+
+      if (!apiResponse.success) {
+        throw new Error(`API call failed: ${apiResponse.error.message}`);
+      }
+
+      // Parse structured response
+      const parsedResponse = this.parseStructuredResponse(apiResponse.content);
+
+      return {
+        success: true,
+        reasoning: parsedResponse.reasoning,
+        uiCode: parsedResponse.uiCode,
+        hasUI: parsedResponse.hasUI,
+        rawContent: apiResponse.content
+      };
+
+    } catch (error) {
+      console.error('Enhanced AI Service - Generate Response Error:', error);
+      
+      return {
+        success: false,
+        error: {
+          type: this.getErrorType(error),
+          message: error.message,
+          details: error.stack
+        }
+      };
+    }
+  }
+
+  /**
+   * Generate calculation response (legacy compatibility)
+   * @param {string} calculationPrompt - The calculation prompt with user values
+   * @returns {Promise<Object>} - Structured response with reasoning and solution
+   */
+  async generateCalculationResponse(calculationPrompt) {
+    try {
+      // Validate input
+      if (!calculationPrompt || typeof calculationPrompt !== 'string') {
+        throw new Error('Invalid calculation prompt provided');
+      }
+
+      // Call Mistral API directly with calculation prompt
+      const apiResponse = await this.callMistralWithRetry(calculationPrompt, {
+        temperature: 0.3, // Lower temperature for more precise calculations
+        maxTokens: 1000
+      });
+
+      if (!apiResponse.success) {
+        throw new Error(`API call failed: ${apiResponse.error.message}`);
+      }
+
+      // Parse calculation response
+      const parsedResponse = this.parseCalculationResponse(apiResponse.content);
+
+      return {
+        success: true,
+        reasoning: parsedResponse.reasoning,
+        solution: parsedResponse.solution,
+        rawContent: apiResponse.content
+      };
+
+    } catch (error) {
+      console.error('Enhanced AI Service - Calculation Error:', error);
+      
+      // Handle network errors specifically
+      if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        return {
+          success: false,
+          error: {
+            type: 'network_error',
+            message: 'Network error: Unable to connect to Mistral API'
+          }
+        };
+      }
+      
+      return {
+        success: false,
+        error: {
+          type: this.getErrorType(error),
+          message: error.message,
+          details: error.stack
+        }
+      };
+    }
+  }
+
+  /**
+   * Create UI generation prompt (legacy compatibility)
+   * @param {string} userMessage - The user's mathematical question
+   * @returns {string} - Formatted prompt for Mistral
+   */
+  createUIGenerationPrompt(userMessage) {
+    return `You are an AI assistant that helps users with mathematical problems by providing both explanations and interactive UI components.
+
+When responding to mathematical questions, you must structure your response with two sections:
+
+1. <thought>Your reasoning and explanation</thought>
+2. <ui>JavaScript code using safe functions to create interactive components</ui>
+
+Available safe functions for UI creation:
+- createElement(tag, props, children) - Creates HTML elements
+- createInput(props) - Creates input fields (props: {name, type, placeholder, value})
+- createButton(props, text) - Creates buttons (props: {onClick})
+- createForm(props, children) - Creates forms
+- createSelect(props, options) - Creates select dropdowns (props: {name, value}, options: array of createOption)
+- createOption(value, text, selected) - Creates option elements for select dropdowns
+
+For calculations, use onClick handlers like 'calculateLoan', 'calculateArea', etc.
+
+Example response format:
+<thought>
+I'll create a simple calculator for this mathematical problem. The user wants to calculate compound interest, so I'll provide input fields for principal, rate, time, and compounding frequency.
+</thought>
+<ui>
+createForm({}, [
+  createElement('h3', {}, ['Compound Interest Calculator']),
+  createInput({name: 'principal', type: 'number', placeholder: 'Principal amount'}),
+  createInput({name: 'rate', type: 'number', placeholder: 'Annual interest rate (%)'}),
+  createInput({name: 'time', type: 'number', placeholder: 'Time (years)'}),
+  createSelect({name: 'frequency'}, [
+    createOption('1', 'Annually'),
+    createOption('2', 'Semi-annually'),
+    createOption('4', 'Quarterly'),
+    createOption('12', 'Monthly')
+  ]),
+  createButton({onClick: 'calculateCompoundInterest'}, 'Calculate'),
+  createElement('div', {id: 'result'}, ['Result will appear here'])
+])
+</ui>
+
+User question: ${userMessage}
+
+Please provide your response following the exact format above.`;
+  }
+
+  /**
+   * Parse structured response to extract thought and UI sections (legacy compatibility)
+   * @param {string} content - Raw response content from Mistral
+   * @returns {Object} - Parsed response with reasoning and uiCode
+   */
+  parseStructuredResponse(content) {
+    const result = {
+      reasoning: '',
+      uiCode: '',
+      hasUI: false
+    };
+
+    // Extract thought section
+    const thoughtMatch = content.match(/<thought>([\s\S]*?)<\/thought>/i);
+    if (thoughtMatch) {
+      result.reasoning = thoughtMatch[1].trim();
+    }
+
+    // Extract UI section
+    const uiMatch = content.match(/<ui>([\s\S]*?)<\/ui>/i);
+    if (uiMatch) {
+      result.uiCode = uiMatch[1].trim();
+      result.hasUI = true;
+    }
+
+    // If no structured tags found, treat entire content as reasoning
+    if (!thoughtMatch && !uiMatch) {
+      result.reasoning = content.trim();
+    }
+
+    return result;
+  }
+
+  /**
+   * Parse calculation response to extract thought and solution sections (legacy compatibility)
+   * @param {string} content - Raw response content from Mistral
+   * @returns {Object} - Parsed response with reasoning and solution
+   */
+  parseCalculationResponse(content) {
+    const result = {
+      reasoning: '',
+      solution: ''
+    };
+
+    // Extract thought section
+    const thoughtMatch = content.match(/<thought>([\s\S]*?)<\/thought>/i);
+    if (thoughtMatch) {
+      result.reasoning = thoughtMatch[1].trim();
+    }
+
+    // Extract solution section
+    const solutionMatch = content.match(/<solution>([\s\S]*?)<\/solution>/i);
+    if (solutionMatch) {
+      result.solution = solutionMatch[1].trim();
+    }
+
+    // If no structured tags found, try to extract the final answer
+    if (!thoughtMatch && !solutionMatch) {
+      result.reasoning = content.trim();
+      // Try to find a numerical result at the end
+      const lines = content.trim().split('\n');
+      const lastLine = lines[lines.length - 1];
+      if (lastLine && (lastLine.includes('$') || lastLine.match(/\d+/))) {
+        result.solution = lastLine.trim();
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Categorize error types for better error handling (legacy compatibility)
+   * @param {Error} error - The error object
+   * @returns {string} - Error type category
+   */
+  getErrorType(error) {
+    if (error.message.includes('API key')) {
+      return 'authentication_error';
+    }
+    if (error.message.includes('Network error') || error.message.includes('fetch')) {
+      return 'network_error';
+    }
+    if (error.message.includes('Mistral API error')) {
+      return 'api_error';
+    }
+    if (error.message.includes('Invalid')) {
+      return 'validation_error';
+    }
+    return 'unknown_error';
   }
 }
 

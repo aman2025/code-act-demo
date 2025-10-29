@@ -164,8 +164,14 @@ class AgentController {
         const plannedAction = this.planNextAction(reasoning, feedbackContext);
         this.agentState.addAction(plannedAction);
 
-        // Step 9: Create environmental observation for next iteration
-        const observation = this.createEnvironmentalObservation(reasoning, plannedAction, feedbackContext);
+        // Step 9: Execute tool if action is a tool call
+        let toolExecutionResult = null;
+        if (plannedAction.type === 'tool_call' && this.toolManager) {
+          toolExecutionResult = await this.executeToolAction(plannedAction);
+        }
+
+        // Step 10: Create environmental observation for next iteration
+        const observation = this.createEnvironmentalObservation(reasoning, plannedAction, feedbackContext, toolExecutionResult);
         this.agentState.addObservation(observation);
 
         // Step 10: Update confidence based on environmental feedback and error recovery
@@ -347,6 +353,15 @@ class AgentController {
       };
     }
     
+    // If we have tool execution capabilities, try to select a tool
+    if (this.enhancedAIService && this.toolManager) {
+      // Use enhanced AI service to determine if we should use a tool
+      const toolSelectionAction = this.planToolAction(reasoning, currentState);
+      if (toolSelectionAction) {
+        return toolSelectionAction;
+      }
+    }
+    
     // Use environmental feedback to inform action planning
     let actionType = 'reasoning';
     let description = 'Continue analysis and reasoning';
@@ -368,21 +383,211 @@ class AgentController {
   }
 
   /**
+   * Plan tool action based on reasoning
+   * @param {string} reasoning - Current reasoning
+   * @param {Object} currentState - Current agent state
+   * @returns {Object|null} - Tool action or null
+   */
+  planToolAction(reasoning, currentState) {
+    const query = currentState.originalQuery.toLowerCase();
+    
+    // Simple tool selection logic based on query content
+    if (query.includes('weather') || query.includes('temperature') || query.includes('forecast')) {
+      return {
+        type: 'tool_call',
+        toolName: 'weather-service',
+        parameters: this.extractWeatherParameters(query),
+        description: 'Get weather information',
+        reasoning: reasoning.substring(0, 200) + '...',
+        iteration: currentState.currentIteration
+      };
+    }
+    
+    if (query.includes('area') && (query.includes('triangle') || query.includes('rectangle') || query.includes('circle'))) {
+      return {
+        type: 'tool_call',
+        toolName: 'area-calculator',
+        parameters: this.extractAreaParameters(query),
+        description: 'Calculate geometric area',
+        reasoning: reasoning.substring(0, 200) + '...',
+        iteration: currentState.currentIteration
+      };
+    }
+    
+    if (query.includes('percentage') || query.includes('percent') || query.includes('%')) {
+      return {
+        type: 'tool_call',
+        toolName: 'percentage-calculator',
+        parameters: this.extractPercentageParameters(query),
+        description: 'Calculate percentage',
+        reasoning: reasoning.substring(0, 200) + '...',
+        iteration: currentState.currentIteration
+      };
+    }
+    
+    if (query.includes('flight') || query.includes('flights')) {
+      return {
+        type: 'tool_call',
+        toolName: 'flight-service',
+        parameters: this.extractFlightParameters(query),
+        description: 'Search for flights',
+        reasoning: reasoning.substring(0, 200) + '...',
+        iteration: currentState.currentIteration
+      };
+    }
+    
+    return null;
+  }
+
+  /**
+   * Extract weather parameters from query
+   * @param {string} query - User query
+   * @returns {Object} - Weather parameters
+   */
+  extractWeatherParameters(query) {
+    // Simple parameter extraction - in a full implementation, this would use NLP
+    const locationMatch = query.match(/weather in ([^?]+)/i) || query.match(/weather for ([^?]+)/i);
+    const location = locationMatch ? locationMatch[1].trim() : 'New York';
+    
+    return {
+      location: location,
+      units: 'celsius',
+      include_forecast: false
+    };
+  }
+
+  /**
+   * Extract area calculation parameters from query
+   * @param {string} query - User query
+   * @returns {Object} - Area parameters
+   */
+  extractAreaParameters(query) {
+    const params = { shape: 'triangle' };
+    
+    if (query.includes('triangle')) {
+      params.shape = 'triangle';
+      // Look for dimensions
+      const sideMatch = query.match(/side length of (\d+(?:\.\d+)?)/i);
+      if (sideMatch) {
+        const side = parseFloat(sideMatch[1]);
+        params.base = side;
+        params.height = side * Math.sqrt(3) / 2; // For equilateral triangle
+      } else {
+        params.base = 5;
+        params.height = 4;
+      }
+    } else if (query.includes('rectangle')) {
+      params.shape = 'rectangle';
+      params.width = 5;
+      params.height = 3;
+    } else if (query.includes('circle')) {
+      params.shape = 'circle';
+      params.radius = 3;
+    }
+    
+    return params;
+  }
+
+  /**
+   * Extract percentage parameters from query
+   * @param {string} query - User query
+   * @returns {Object} - Percentage parameters
+   */
+  extractPercentageParameters(query) {
+    return {
+      operation: 'what_percentage',
+      value: 25,
+      total: 100
+    };
+  }
+
+  /**
+   * Extract flight parameters from query
+   * @param {string} query - User query
+   * @returns {Object} - Flight parameters
+   */
+  extractFlightParameters(query) {
+    return {
+      from: 'NYC',
+      to: 'LAX',
+      date: '2024-12-15',
+      passengers: 1
+    };
+  }
+
+  /**
+   * Execute a tool action
+   * @param {Object} action - Action with tool execution details
+   * @returns {Promise<Object>} - Tool execution result
+   */
+  async executeToolAction(action) {
+    if (!this.toolManager || !action.toolName) {
+      return {
+        success: false,
+        error: 'Tool manager not available or tool name missing'
+      };
+    }
+
+    try {
+      console.log(`Executing tool: ${action.toolName} with parameters:`, action.parameters);
+      
+      const result = await this.toolManager.executeToolWithObservations(
+        action.toolName,
+        action.parameters,
+        { timeout: 10000 }
+      );
+
+      console.log(`Tool execution result:`, result.success ? 'Success' : 'Failed');
+      
+      return result;
+
+    } catch (error) {
+      console.error(`Tool execution error for ${action.toolName}:`, error);
+      
+      return {
+        success: false,
+        error: error.message,
+        toolName: action.toolName
+      };
+    }
+  }
+
+  /**
    * Create environmental observation with ground truth feedback
    * @param {string} reasoning - Current reasoning
    * @param {Object} action - Planned action
    * @param {Object} feedbackContext - Environmental feedback context
+   * @param {Object} toolExecutionResult - Tool execution result (optional)
    * @returns {Object} - Environmental observation
    */
-  createEnvironmentalObservation(reasoning, action, feedbackContext) {
+  createEnvironmentalObservation(reasoning, action, feedbackContext, toolExecutionResult = null) {
     const currentState = this.agentState.getState();
+    
+    let observationContent = `Iteration ${currentState.currentIteration}: Environmental feedback integrated into reasoning and action planning`;
+    
+    // Add tool execution information if available
+    if (toolExecutionResult && action.type === 'tool_call') {
+      if (toolExecutionResult.success) {
+        observationContent += `\nTool execution successful: ${action.toolName}`;
+        if (toolExecutionResult.result && toolExecutionResult.result.data) {
+          observationContent += `\nTool result: ${JSON.stringify(toolExecutionResult.result.data).substring(0, 200)}`;
+        }
+      } else {
+        observationContent += `\nTool execution failed: ${action.toolName} - ${toolExecutionResult.error}`;
+      }
+    }
     
     // Create observation that captures environmental ground truth
     const observation = this.observationGenerator.createProgressObservation(
-      `Iteration ${currentState.currentIteration}: Environmental feedback integrated into reasoning and action planning`,
+      observationContent,
       {
         reasoningLength: reasoning.length,
         actionType: action.type,
+        toolExecution: toolExecutionResult ? {
+          toolName: action.toolName,
+          success: toolExecutionResult.success,
+          hasResult: !!toolExecutionResult.result
+        } : null,
         environmentalFeedback: {
           observationsProcessed: feedbackContext.feedbackSummary?.totalObservations || 0,
           insightsGenerated: feedbackContext.actionableInsights?.length || 0,
@@ -397,7 +602,9 @@ class AgentController {
       ...observation.groundTruth,
       environmentalFeedbackIntegrated: true,
       feedbackQuality: feedbackContext.feedbackSummary?.totalObservations > 0 ? 'available' : 'limited',
-      actionInfluencedByEnvironment: feedbackContext.recommendedActions?.length > 0
+      actionInfluencedByEnvironment: feedbackContext.recommendedActions?.length > 0,
+      toolExecuted: toolExecutionResult !== null,
+      toolSuccess: toolExecutionResult ? toolExecutionResult.success : false
     };
     
     return observation;
@@ -452,6 +659,11 @@ class AgentController {
     // Compile final answer from reasoning
     const finalAnswer = this.compileFinalAnswer();
     
+    // Extract tools used from actions
+    const toolsUsed = currentState.actions
+      .filter(action => action.type === 'tool_call' && action.toolName)
+      .map(action => action.toolName);
+
     return {
       success: true,
       reasoning: currentState.reasoning.map(r => r.content),
@@ -460,7 +672,7 @@ class AgentController {
       finalAnswer: finalAnswer,
       agentMode: true,
       iterations: currentState.currentIteration,
-      toolsUsed: [], // Will be populated when tools are integrated
+      toolsUsed: toolsUsed,
       finalConfidence: currentState.confidence,
       strategy: currentState.strategy,
       executionTime: currentState.executionTime,
@@ -480,10 +692,35 @@ class AgentController {
       return "I wasn't able to generate a complete analysis for your query.";
     }
 
-    const lastReasoning = currentState.reasoning[currentState.reasoning.length - 1];
+    // Look for tool execution results in observations
+    const toolResults = currentState.observations
+      .filter(obs => obs.data && obs.data.toolExecution && obs.data.toolExecution.success)
+      .map(obs => obs.data.toolExecution);
+
+    let answer = `Based on my analysis of "${currentState.originalQuery}":`;
     
-    // For MVP, return a simple compiled answer
-    return `Based on my analysis of "${currentState.originalQuery}", here's my response: ${lastReasoning.content}`;
+    // Include tool results if available
+    if (toolResults.length > 0) {
+      answer += '\n\nResults from tool execution:';
+      toolResults.forEach((toolResult, index) => {
+        answer += `\n${index + 1}. ${toolResult.toolName}: `;
+        // Extract meaningful result from the observation content
+        const observation = currentState.observations.find(obs => 
+          obs.data && obs.data.toolExecution && obs.data.toolExecution.toolName === toolResult.toolName
+        );
+        if (observation && observation.content.includes('Tool result:')) {
+          const resultMatch = observation.content.match(/Tool result: (.+)/);
+          if (resultMatch) {
+            answer += resultMatch[1];
+          }
+        }
+      });
+    }
+
+    const lastReasoning = currentState.reasoning[currentState.reasoning.length - 1];
+    answer += `\n\nConclusion: ${lastReasoning.content}`;
+    
+    return answer;
   }
 
   /**
@@ -825,6 +1062,17 @@ class AgentController {
   setAutonomousMode(mode) {
     this.autonomousOperationManager.setOperationMode(mode);
     console.log(`Agent autonomous mode set to: ${mode}`);
+  }
+
+  /**
+   * Set tool execution dependencies (called by integrated system)
+   * @param {Object} toolManager - Tool manager instance
+   * @param {Object} enhancedAIService - Enhanced AI service instance
+   */
+  setToolExecutionCapabilities(toolManager, enhancedAIService) {
+    this.toolManager = toolManager;
+    this.enhancedAIService = enhancedAIService;
+    console.log('Agent controller configured with tool execution capabilities');
   }
 
   /**

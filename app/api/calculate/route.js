@@ -1,4 +1,4 @@
-import aiService from '../../../core/aiService.js';
+import EnhancedAIService from '../../../core/enhancedAIService.js';
 
 /**
  * POST /api/calculate - Calculation API route for user interactions
@@ -63,8 +63,11 @@ export async function POST(request) {
     // Create calculation prompt with sanitized values
     const calculationPrompt = createCalculationPrompt(action, sanitizedValues, context);
 
+    // Create enhanced AI service instance for calculation
+    const enhancedAIService = new EnhancedAIService(null); // No tool registry needed for calculations
+    
     // Get AI response for calculation
-    const aiResponse = await aiService.generateCalculationResponse(calculationPrompt);
+    const aiResponse = await enhancedAIService.generateCalculationResponse(calculationPrompt);
 
     // Handle AI service errors
     if (!aiResponse.success) {

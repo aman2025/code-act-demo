@@ -138,52 +138,75 @@ class ToolRegistry {
    * @returns {boolean} - Whether tool is valid
    */
   validateTool(tool) {
-    // Check required properties
-    const requiredProperties = ['name', 'description', 'category', 'execute'];
-    
-    for (const prop of requiredProperties) {
-      if (!tool.hasOwnProperty(prop)) {
-        console.error(`Tool validation failed: missing property '${prop}'`);
+    try {
+      // Check if tool is a valid object
+      if (!tool || typeof tool !== 'object') {
+        console.error('Tool validation failed: tool must be an object');
         return false;
       }
-    }
 
-    // Validate property types
-    if (typeof tool.name !== 'string' || tool.name.trim() === '') {
-      console.error('Tool validation failed: name must be a non-empty string');
-      return false;
-    }
-
-    if (typeof tool.description !== 'string' || tool.description.trim() === '') {
-      console.error('Tool validation failed: description must be a non-empty string');
-      return false;
-    }
-
-    if (typeof tool.category !== 'string' || tool.category.trim() === '') {
-      console.error('Tool validation failed: category must be a non-empty string');
-      return false;
-    }
-
-    if (typeof tool.execute !== 'function') {
-      console.error('Tool validation failed: execute must be a function');
-      return false;
-    }
-
-    // Validate parameters if present
-    if (tool.parameters && !Array.isArray(tool.parameters)) {
-      console.error('Tool validation failed: parameters must be an array');
-      return false;
-    }
-
-    if (tool.parameters) {
-      for (const param of tool.parameters) {
-        if (!this.validateParameter(param)) {
+      // Check required properties (including inherited ones)
+      const requiredProperties = ['name', 'description', 'category'];
+      
+      for (const prop of requiredProperties) {
+        if (!(prop in tool)) {
+          console.error(`Tool validation failed: missing property '${prop}'`);
           return false;
         }
       }
-    }
 
-    return true;
+      // Check execute method separately with more detailed logging
+      if (!('execute' in tool)) {
+        console.error('Tool validation failed: missing execute method');
+        console.error('Tool prototype chain:', tool.constructor.name);
+        console.error('Available methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(tool)));
+        return false;
+      }
+
+      if (typeof tool.execute !== 'function') {
+        console.error('Tool validation failed: execute must be a function');
+        console.error('Execute property type:', typeof tool.execute);
+        console.error('Execute property value:', tool.execute);
+        return false;
+      }
+
+      // Validate property types
+      if (typeof tool.name !== 'string' || tool.name.trim() === '') {
+        console.error('Tool validation failed: name must be a non-empty string');
+        return false;
+      }
+
+      if (typeof tool.description !== 'string' || tool.description.trim() === '') {
+        console.error('Tool validation failed: description must be a non-empty string');
+        return false;
+      }
+
+      if (typeof tool.category !== 'string' || tool.category.trim() === '') {
+        console.error('Tool validation failed: category must be a non-empty string');
+        return false;
+      }
+
+      // Validate parameters if present
+      if (tool.parameters && !Array.isArray(tool.parameters)) {
+        console.error('Tool validation failed: parameters must be an array');
+        return false;
+      }
+
+      if (tool.parameters) {
+        for (const param of tool.parameters) {
+          if (!this.validateParameter(param)) {
+            return false;
+          }
+        }
+      }
+
+      return true;
+      
+    } catch (error) {
+      console.error('Tool validation error:', error);
+      console.error('Tool object:', tool);
+      return false;
+    }
   }
 
   /**

@@ -14,9 +14,9 @@ class IntegratedAgentSystem {
   constructor() {
     this.agentController = new AgentController();
     this.toolManager = new ToolManager();
-    this.enhancedAIService = new EnhancedAIService();
+    this.enhancedAIService = null; // Will be initialized after toolManager
     this.responseParser = new AgentResponseParser();
-    this.promptingSystem = new AgentPromptingSystem();
+    this.promptingSystem = null; // Will be initialized after toolManager
     this.monitoringSystem = new AgentMonitoringSystem();
     
     // Guardrails and safety controls
@@ -61,14 +61,17 @@ class IntegratedAgentSystem {
       // Initialize tool manager first
       await this.toolManager.initialize();
 
-      // Initialize enhanced AI service
-      await this.enhancedAIService.initialize();
+      // Initialize enhanced AI service with tool registry
+      this.enhancedAIService = new EnhancedAIService(this.toolManager.toolRegistry);
 
-      // Initialize prompting system
-      this.promptingSystem.initialize();
+      // Initialize prompting system with tool registry
+      this.promptingSystem = new AgentPromptingSystem(this.toolManager.toolRegistry);
 
       // Configure agent controller with tool integration
       this.configureAgentControllerIntegration();
+      
+      // Set tool execution capabilities on agent controller
+      this.agentController.setToolExecutionCapabilities(this.toolManager, this.enhancedAIService);
 
       this.initialized = true;
       this.sessionId = this.generateSessionId();
