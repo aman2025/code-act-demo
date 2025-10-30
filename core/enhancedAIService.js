@@ -3,6 +3,7 @@
  * Integrates prompting system and response parsing for autonomous agents
  */
 
+import { Mistral } from '@mistralai/mistralai';
 import AgentPromptingSystem from './agentPromptingSystem.js';
 import AgentResponseParser from './agentResponseParser.js';
 
@@ -11,6 +12,11 @@ class EnhancedAIService {
     this.promptingSystem = new AgentPromptingSystem(toolRegistry);
     this.responseParser = new AgentResponseParser();
     this.toolRegistry = toolRegistry;
+    
+    // Initialize Mistral client
+    this.mistralClient = new Mistral({
+      apiKey: process.env.MISTRAL_API_KEY
+    });
     
     // Configuration
     this.maxRetries = 3;
@@ -68,7 +74,7 @@ class EnhancedAIService {
   }
 
   /**
-   * Parse tool selection from LLM response
+   * Parse tool selection from LLM response with native tool calling
    * @param {string} reasoning - Current agent reasoning
    * @param {string} userQuery - Original user query
    * @param {Object} context - Agent context with history
@@ -86,13 +92,50 @@ class EnhancedAIService {
 
       const apiResponse = await this.callMistralWithRetry(prompt, {
         temperature: this.temperatureSettings.toolSelection,
-        maxTokens: 1000
+        maxTokens: 1000,
+        enableTools: true,
+        tools: availableTools
       });
 
       if (!apiResponse.success) {
         throw new Error(`API call failed: ${apiResponse.error.message}`);
       }
 
+      // Handle tool calls from Mistral API
+      if (apiResponse.toolCalls && apiResponse.toolCalls.length > 0) {
+        const toolCall = apiResponse.toolCalls[0]; // Use first tool call
+        const toolName = toolCall.function.name;
+        const parameters = JSON.parse(toolCall.function.arguments || '{}');
+
+        // Validate tool exists
+        const tool = this.toolRegistry.getTool(toolName);
+        if (!tool) {
+          return {
+            success: false,
+            actionType: 'clarification',
+            selectedTool: null,
+            parameters: {},
+            reasoning: `Tool '${toolName}' not found in registry`,
+            confidence: 0.1,
+            rawResponse: apiResponse.content,
+            errors: [`Tool '${toolName}' not found in registry`]
+          };
+        }
+
+        return {
+          success: true,
+          actionType: 'tool_call',
+          selectedTool: toolName,
+          parameters: parameters,
+          reasoning: apiResponse.content || reasoning,
+          confidence: 0.9,
+          rawResponse: apiResponse.content,
+          toolCallId: toolCall.id,
+          errors: []
+        };
+      }
+
+      // Fallback to text parsing if no tool calls
       const parsedResponse = this.responseParser.parseToolSelection(apiResponse.content);
       
       // Validate tool exists if one was selected
@@ -131,22 +174,64 @@ class EnhancedAIService {
   }
 
   /**
-   * Generate continuation reasoning after tool execution
+   * Handle tool call response and create tool message
+   * @param {string} toolCallId - Tool call ID from Mistral
+   * @param {Object} toolResult - Result from tool execution
+   * @returns {Object} - Tool message for conversation
+   */
+  createToolMessage(toolCallId, toolResult) {
+    return {
+      role: 'tool',
+      tool_call_id: toolCallId,
+      content: JSON.stringify({
+        success: toolResult.success,
+        data: toolResult.data,
+        message: toolResult.message,
+        executionTime: toolResult.executionTime
+      })
+    };
+  }
+
+  /**
+   * Generate continuation reasoning after tool execution with conversation context
    * @param {Object} context - Complete agent context
    * @param {Object} lastObservation - Latest observation from tool execution
    * @returns {Promise<Object>} - Parsed continuation response
    */
   async generateContinuation(context, lastObservation) {
     try {
-      const prompt = this.promptingSystem.createContinuationPrompt(context, lastObservation);
+      // Build conversation messages including tool calls and responses
+      const messages = this.buildConversationMessages(context, lastObservation);
 
-      const apiResponse = await this.callMistralWithRetry(prompt, {
+      const apiResponse = await this.callMistralWithRetry(messages, {
         temperature: this.temperatureSettings.reasoning,
-        maxTokens: 1500
+        maxTokens: 1500,
+        enableTools: true,
+        tools: this.toolRegistry.getAvailableTools()
       });
 
       if (!apiResponse.success) {
         throw new Error(`API call failed: ${apiResponse.error.message}`);
+      }
+
+      // Handle potential new tool calls
+      if (apiResponse.toolCalls && apiResponse.toolCalls.length > 0) {
+        const toolCall = apiResponse.toolCalls[0];
+        return {
+          success: true,
+          updatedReasoning: apiResponse.content,
+          nextAction: 'tool_call',
+          status: 'continuing',
+          shouldContinue: true,
+          confidence: 0.8,
+          rawResponse: apiResponse.content,
+          toolCall: {
+            id: toolCall.id,
+            name: toolCall.function.name,
+            parameters: JSON.parse(toolCall.function.arguments || '{}')
+          },
+          errors: []
+        };
       }
 
       const parsedResponse = this.responseParser.parseContinuation(apiResponse.content);
@@ -173,6 +258,56 @@ class EnhancedAIService {
         }
       };
     }
+  }
+
+  /**
+   * Build conversation messages from context and observations
+   * @param {Object} context - Agent context
+   * @param {Object} lastObservation - Latest observation
+   * @returns {Array} - Conversation messages
+   */
+  buildConversationMessages(context, lastObservation) {
+    const messages = [];
+
+    // Add system message
+    messages.push({
+      role: 'system',
+      content: 'You are an AI agent that can use tools to help answer questions. Continue your reasoning based on the tool results.'
+    });
+
+    // Add user query
+    if (context.query) {
+      messages.push({
+        role: 'user',
+        content: context.query
+      });
+    }
+
+    // Add previous reasoning as assistant message
+    if (context.reasoning && context.reasoning.length > 0) {
+      const latestReasoning = context.reasoning[context.reasoning.length - 1];
+      messages.push({
+        role: 'assistant',
+        content: latestReasoning.content
+      });
+    }
+
+    // Add tool call and response if available
+    if (lastObservation && lastObservation.type === 'success' && context.actions) {
+      const lastAction = context.actions[context.actions.length - 1];
+      if (lastAction && lastAction.toolCallId) {
+        // Add tool response message
+        messages.push(this.createToolMessage(lastAction.toolCallId, {
+          toolName: lastAction.tool,
+          success: true,
+          data: lastObservation.data,
+          message: lastObservation.content,
+          executionTime: lastObservation.metadata?.executionTime
+        }));
+      }
+    }
+
+    return messages;
   }
 
   /**
@@ -263,7 +398,7 @@ class EnhancedAIService {
   }
 
   /**
-   * Generate planning for complex multi-step problems
+   * Generate planning for complex multi-step problems with tool awareness
    * @param {string} userQuery - Complex user query
    * @param {Object} context - Agent context
    * @returns {Promise<Object>} - Generated plan
@@ -275,7 +410,9 @@ class EnhancedAIService {
 
       const apiResponse = await this.callMistralWithRetry(prompt, {
         temperature: this.temperatureSettings.reasoning,
-        maxTokens: 2000
+        maxTokens: 2000,
+        enableTools: false, // Planning doesn't need tool execution, just awareness
+        tools: availableTools
       });
 
       if (!apiResponse.success) {
@@ -305,52 +442,274 @@ class EnhancedAIService {
   }
 
   /**
-   * Call Mistral API with retry logic
-   * @param {string} prompt - Prompt to send
+   * Execute a complete tool-calling conversation
+   * @param {string} userQuery - User's query
+   * @param {Object} options - Execution options
+   * @returns {Promise<Object>} - Complete conversation result
+   */
+  async executeToolConversation(userQuery, options = {}) {
+    const defaultOptions = {
+      maxTurns: 5,
+      temperature: 0.7,
+      enableTools: true
+    };
+
+    const finalOptions = { ...defaultOptions, ...options };
+    const messages = [
+      {
+        role: 'system',
+        content: 'You are a helpful AI assistant that can use tools to answer questions. Use the available tools when needed to provide accurate information.'
+      },
+      {
+        role: 'user',
+        content: userQuery
+      }
+    ];
+
+    const conversationHistory = [];
+    let turnCount = 0;
+
+    try {
+      while (turnCount < finalOptions.maxTurns) {
+        turnCount++;
+
+        const apiResponse = await this.callMistralWithRetry(messages, {
+          temperature: finalOptions.temperature,
+          maxTokens: 1500,
+          enableTools: finalOptions.enableTools,
+          tools: this.toolRegistry.getAvailableTools()
+        });
+
+        if (!apiResponse.success) {
+          throw new Error(`API call failed: ${apiResponse.error.message}`);
+        }
+
+        // Add assistant response to messages
+        const assistantMessage = {
+          role: 'assistant',
+          content: apiResponse.content || null
+        };
+        
+        // Add tool_calls if present
+        if (apiResponse.toolCalls && apiResponse.toolCalls.length > 0) {
+          assistantMessage.tool_calls = apiResponse.toolCalls;
+        }
+        
+        messages.push(assistantMessage);
+
+        conversationHistory.push({
+          turn: turnCount,
+          role: 'assistant',
+          content: apiResponse.content,
+          toolCalls: apiResponse.toolCalls,
+          finishReason: apiResponse.finishReason
+        });
+
+        // If no tool calls, conversation is complete
+        if (!apiResponse.toolCalls || apiResponse.toolCalls.length === 0) {
+          break;
+        }
+
+        // Execute tool calls
+        for (const toolCall of apiResponse.toolCalls) {
+          try {
+            const toolName = toolCall.function.name;
+            const parameters = JSON.parse(toolCall.function.arguments || '{}');
+
+            // Execute tool (this would need to be connected to your tool executor)
+            const toolResult = await this.executeToolCall(toolName, parameters);
+
+            // Add tool response to messages
+            messages.push(this.createToolMessage(toolCall.id, toolResult));
+
+            conversationHistory.push({
+              turn: turnCount,
+              role: 'tool',
+              toolName: toolName,
+              toolCallId: toolCall.id,
+              parameters: parameters,
+              result: toolResult
+            });
+
+          } catch (toolError) {
+            console.error(`Tool execution failed: ${toolCall.function.name}`, toolError);
+            
+            // Add error response
+            messages.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: JSON.stringify({
+                success: false,
+                error: toolError.message
+              })
+            });
+          }
+        }
+
+        // Check if we should continue
+        if (apiResponse.finishReason === 'stop') {
+          break;
+        }
+      }
+
+      return {
+        success: true,
+        finalResponse: messages[messages.length - 1].content,
+        conversationHistory: conversationHistory,
+        totalTurns: turnCount,
+        messages: messages
+      };
+
+    } catch (error) {
+      console.error('Tool conversation error:', error);
+      return {
+        success: false,
+        error: {
+          type: 'conversation_failed',
+          message: error.message,
+          conversationHistory: conversationHistory,
+          totalTurns: turnCount
+        }
+      };
+    }
+  }
+
+  /**
+   * Execute a single tool call (placeholder - should be connected to tool executor)
+   * @param {string} toolName - Tool name
+   * @param {Object} parameters - Tool parameters
+   * @returns {Promise<Object>} - Tool result
+   */
+  async executeToolCall(toolName, parameters) {
+    // This is a placeholder - in practice, this should call your tool executor
+    // For now, return a mock result
+    return {
+      toolName: toolName,
+      success: true,
+      data: `Mock result for ${toolName} with parameters: ${JSON.stringify(parameters)}`,
+      message: 'Tool executed successfully',
+      executionTime: 100
+    };
+  }
+
+  /**
+   * Convert tools to Mistral API format
+   * @param {Array} tools - Array of tool objects
+   * @returns {Array} - Tools in Mistral API format
+   */
+  convertToolsToMistralFormat(tools) {
+    return tools.map(tool => ({
+      type: 'function',
+      function: {
+        name: tool.name,
+        description: tool.description,
+        parameters: this.convertParametersToJsonSchema(tool.parameters || [])
+      }
+    }));
+  }
+
+  /**
+   * Convert tool parameters to JSON Schema format
+   * @param {Array} parameters - Tool parameters
+   * @returns {Object} - JSON Schema object
+   */
+  convertParametersToJsonSchema(parameters) {
+    const schema = {
+      type: 'object',
+      properties: {},
+      required: []
+    };
+
+    parameters.forEach(param => {
+      schema.properties[param.name] = {
+        type: param.type,
+        description: param.description
+      };
+
+      if (param.required) {
+        schema.required.push(param.name);
+      }
+
+      if (param.defaultValue !== undefined) {
+        schema.properties[param.name].default = param.defaultValue;
+      }
+    });
+
+    return schema;
+  }
+
+  /**
+   * Call Mistral API with retry logic and tool support
+   * @param {string|Array} messages - Messages to send (string for single user message, array for conversation)
    * @param {Object} options - API call options
    * @returns {Promise<Object>} - API response
    */
-  async callMistralWithRetry(prompt, options = {}) {
+  async callMistralWithRetry(messages, options = {}) {
     const defaultOptions = {
       temperature: 0.7,
-      maxTokens: 1500
+      maxTokens: 1500,
+      enableTools: false,
+      tools: []
     };
 
     const finalOptions = { ...defaultOptions, ...options };
     let lastError;
 
+    // Format messages
+    let formattedMessages;
+    if (typeof messages === 'string') {
+      formattedMessages = [{ role: 'user', content: messages }];
+    } else if (Array.isArray(messages)) {
+      formattedMessages = messages;
+    } else {
+      throw new Error('Messages must be a string or array');
+    }
+
+    // Validate message format according to Mistral API requirements
+    formattedMessages = formattedMessages.map(msg => {
+      if (!msg.role) {
+        throw new Error('Message must have a role field');
+      }
+      
+      // Ensure content is present for non-tool messages or when required
+      if (msg.role !== 'tool' && !msg.content && !msg.tool_calls) {
+        throw new Error(`Message with role '${msg.role}' must have content`);
+      }
+      
+      return msg;
+    });
+
+    // Prepare API call parameters
+    const apiParams = {
+      model: 'mistral-large-latest',
+      messages: formattedMessages,
+      temperature: finalOptions.temperature,
+      max_tokens: finalOptions.maxTokens
+    };
+
+    // Add tools if enabled and available
+    if (finalOptions.enableTools && finalOptions.tools && finalOptions.tools.length > 0) {
+      apiParams.tools = this.convertToolsToMistralFormat(finalOptions.tools);
+      apiParams.tool_choice = 'auto'; // Let the model decide when to use tools
+    }
+
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
-        // Use the base AI service's API calling method
-        const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.MISTRAL_API_KEY}`
-          },
-          body: JSON.stringify({
-            model: 'mistral-large-latest',
-            messages: [{ role: 'user', content: prompt }],
-            temperature: finalOptions.temperature,
-            max_tokens: finalOptions.maxTokens
-          })
-        });
+        const response = await this.mistralClient.chat.complete(apiParams);
 
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(`Mistral API error: ${response.status} - ${errorData.message || response.statusText}`);
-        }
-
-        const data = await response.json();
-        
-        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+        if (!response.choices || !response.choices[0]) {
           throw new Error('Invalid response format from Mistral API');
         }
 
+        const choice = response.choices[0];
+        
         return {
           success: true,
-          content: data.choices[0].message.content,
-          usage: data.usage
+          content: choice.message.content,
+          toolCalls: choice.message.tool_calls || null,
+          finishReason: choice.finish_reason,
+          usage: response.usage,
+          rawResponse: response
         };
 
       } catch (error) {
@@ -439,6 +798,9 @@ class EnhancedAIService {
       maxRetries: this.maxRetries,
       retryDelay: this.retryDelay,
       temperatureSettings: this.temperatureSettings,
+      mistralClientInitialized: !!this.mistralClient,
+      toolCallingEnabled: true,
+      availableTools: this.toolRegistry.getAvailableTools().length,
       promptingSystem: this.promptingSystem.getPromptConfiguration(),
       responseParser: this.responseParser.getParserInfo(),
       toolRegistry: this.toolRegistry.getStatistics()
@@ -460,6 +822,61 @@ class EnhancedAIService {
     
     if (config.temperatureSettings) {
       this.temperatureSettings = { ...this.temperatureSettings, ...config.temperatureSettings };
+    }
+
+    // Reinitialize Mistral client if API key changed
+    if (config.apiKey) {
+      this.mistralClient = new Mistral({
+        apiKey: config.apiKey
+      });
+    }
+  }
+
+  /**
+   * Test Mistral API connection
+   * @returns {Promise<Object>} - Connection test result
+   */
+  async testConnection() {
+    try {
+      const testResponse = await this.callMistralWithRetry('Hello, this is a connection test.', {
+        temperature: 0.1,
+        maxTokens: 50
+      });
+
+      return {
+        success: testResponse.success,
+        connected: testResponse.success,
+        message: testResponse.success ? 'Connection successful' : testResponse.error.message,
+        usage: testResponse.usage
+      };
+
+    } catch (error) {
+      return {
+        success: false,
+        connected: false,
+        message: `Connection failed: ${error.message}`,
+        error: error
+      };
+    }
+  }
+
+  /**
+   * Get available models from Mistral
+   * @returns {Promise<Object>} - Available models
+   */
+  async getAvailableModels() {
+    try {
+      const models = await this.mistralClient.models.list();
+      return {
+        success: true,
+        models: models.data || []
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message,
+        models: []
+      };
     }
   }
 
