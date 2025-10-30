@@ -254,27 +254,34 @@ class IntegratedAgentSystem {
   }
 
   /**
-   * Generate tool-aware reasoning
+   * Generate tool-aware reasoning with direct tool calling
    * @param {Object} feedbackContext - Feedback context
    * @param {Object} promptingContext - Prompting context
    * @returns {Promise<string>} - Enhanced reasoning
    */
   async generateToolAwareReasoning(feedbackContext, promptingContext) {
     try {
-      // Create enhanced prompt with tool awareness
-      const prompt = this.promptingSystem.createToolAwareReasoningPrompt(
-        promptingContext,
-        feedbackContext
-      );
+      const { userQuery } = promptingContext;
 
-      // Generate reasoning with enhanced AI service
-      const reasoning = await this.enhancedAIService.generateAgentReasoning({
-        prompt,
-        context: feedbackContext,
-        tools: promptingContext.availableTools
+      // Use the complete tool conversation to handle the query
+      const conversationResult = await this.enhancedAIService.executeToolConversation(userQuery, {
+        maxTurns: 3,
+        temperature: 0.7
       });
 
-      return reasoning;
+      if (conversationResult.success) {
+        // Store tools used for reporting
+        if (conversationResult.toolsUsed && conversationResult.toolsUsed.length > 0) {
+          // Update the agent state with tools used
+          const currentState = this.agentController.agentState.getState();
+          currentState.toolsUsed = conversationResult.toolsUsed;
+        }
+
+        return conversationResult.finalResponse || 'I have processed your query using available tools.';
+      } else {
+        console.error('Tool conversation failed:', conversationResult.error);
+        return `I encountered an error while processing your query: ${conversationResult.error.message}`;
+      }
 
     } catch (error) {
       console.error('Tool-aware reasoning generation failed:', error);

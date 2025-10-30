@@ -49,6 +49,45 @@ Begin your reasoning now:`;
   }
 
   /**
+   * Create tool-aware reasoning prompt for integrated system
+   * @param {Object} promptingContext - Prompting context with tools and capabilities
+   * @param {Object} feedbackContext - Feedback context from previous iterations
+   * @returns {string} - Tool-aware reasoning prompt
+   */
+  createToolAwareReasoningPrompt(promptingContext, feedbackContext) {
+    const { userQuery, availableTools, systemCapabilities } = promptingContext;
+    const toolDescriptions = this.formatToolDescriptions(availableTools);
+
+    let contextInfo = '';
+    if (feedbackContext && feedbackContext.observations && feedbackContext.observations.length > 0) {
+      const recentObservations = feedbackContext.observations.slice(-3);
+      contextInfo = `\nPREVIOUS OBSERVATIONS:
+${recentObservations.map(obs => `- ${obs.type}: ${obs.content}`).join('\n')}`;
+    }
+
+    return `You are an intelligent agent with access to tools. Analyze the user's query and determine the best approach.
+
+USER QUERY: ${userQuery}
+
+AVAILABLE TOOLS:
+${toolDescriptions}
+
+SYSTEM CAPABILITIES:
+- Tool execution: ${systemCapabilities?.toolExecution || 'enabled'}
+- Available tools: ${availableTools?.length || 0}
+- Max iterations: ${systemCapabilities?.maxIterations || 10}
+${contextInfo}
+
+INSTRUCTIONS:
+1. Analyze the user's query carefully
+2. Determine if you need to use any tools
+3. If tools are needed, identify which specific tool and parameters
+4. Provide clear reasoning for your approach
+
+Please provide your reasoning and next steps:`;
+  }
+
+  /**
    * Create tool selection prompt based on current reasoning
    * @param {string} reasoning - Current reasoning from the agent
    * @param {string} userQuery - Original user query

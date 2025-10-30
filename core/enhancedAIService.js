@@ -468,10 +468,14 @@ class EnhancedAIService {
 
     const conversationHistory = [];
     let turnCount = 0;
+    let finalAnswer = '';
 
     try {
       while (turnCount < finalOptions.maxTurns) {
         turnCount++;
+        
+        console.log(`=== CONVERSATION TURN ${turnCount} ===`);
+        console.log('Current messages:', JSON.stringify(messages, null, 2));
 
         const apiResponse = await this.callMistralWithRetry(messages, {
           temperature: finalOptions.temperature,
@@ -479,6 +483,12 @@ class EnhancedAIService {
           enableTools: finalOptions.enableTools,
           tools: this.toolRegistry.getAvailableTools()
         });
+
+        console.log(`=== TURN ${turnCount} API RESPONSE ===`);
+        console.log('Success:', apiResponse.success);
+        console.log('Content:', apiResponse.content);
+        console.log('Tool calls:', apiResponse.toolCalls);
+        console.log('Finish reason:', apiResponse.finishReason);
 
         if (!apiResponse.success) {
           throw new Error(`API call failed: ${apiResponse.error.message}`);
@@ -493,6 +503,7 @@ class EnhancedAIService {
         // Add tool_calls if present
         if (apiResponse.toolCalls && apiResponse.toolCalls.length > 0) {
           assistantMessage.tool_calls = apiResponse.toolCalls;
+          console.log('Adding tool_calls to assistant message:', apiResponse.toolCalls);
         }
         
         messages.push(assistantMessage);
@@ -505,10 +516,18 @@ class EnhancedAIService {
           finishReason: apiResponse.finishReason
         });
 
+        // Store the latest response as potential final answer
+        if (apiResponse.content) {
+          finalAnswer = apiResponse.content;
+        }
+
         // If no tool calls, conversation is complete
         if (!apiResponse.toolCalls || apiResponse.toolCalls.length === 0) {
+          console.log('No tool calls found, ending conversation');
           break;
         }
+        
+        console.log(`Found ${apiResponse.toolCalls.length} tool calls to execute`);
 
         // Execute tool calls
         for (const toolCall of apiResponse.toolCalls) {
@@ -516,11 +535,22 @@ class EnhancedAIService {
             const toolName = toolCall.function.name;
             const parameters = JSON.parse(toolCall.function.arguments || '{}');
 
-            // Execute tool (this would need to be connected to your tool executor)
+            console.log(`=== EXECUTING TOOL: ${toolName} ===`);
+            console.log('Tool call ID:', toolCall.id);
+            console.log('Parameters:', parameters);
+
+            // Execute tool
             const toolResult = await this.executeToolCall(toolName, parameters);
 
+            console.log(`=== TOOL ${toolName} RESULT ===`);
+            console.log('Success:', toolResult.success);
+            console.log('Data:', toolResult.data);
+            console.log('Message:', toolResult.message);
+
             // Add tool response to messages
-            messages.push(this.createToolMessage(toolCall.id, toolResult));
+            const toolMessage = this.createToolMessage(toolCall.id, toolResult);
+            console.log('Tool message for conversation:', toolMessage);
+            messages.push(toolMessage);
 
             conversationHistory.push({
               turn: turnCount,
@@ -532,17 +562,20 @@ class EnhancedAIService {
             });
 
           } catch (toolError) {
-            console.error(`Tool execution failed: ${toolCall.function.name}`, toolError);
+            console.error(`=== TOOL EXECUTION ERROR: ${toolCall.function.name} ===`);
+            console.error('Error:', toolError);
             
             // Add error response
-            messages.push({
+            const errorMessage = {
               role: 'tool',
               tool_call_id: toolCall.id,
               content: JSON.stringify({
                 success: false,
                 error: toolError.message
               })
-            });
+            };
+            console.log('Error message for conversation:', errorMessage);
+            messages.push(errorMessage);
           }
         }
 
@@ -552,12 +585,27 @@ class EnhancedAIService {
         }
       }
 
+      // Get the final response after tool execution
+      if (conversationHistory.length > 0) {
+        const lastEntry = conversationHistory[conversationHistory.length - 1];
+        if (lastEntry.role === 'assistant' && lastEntry.content) {
+          finalAnswer = lastEntry.content;
+        }
+      }
+
       return {
         success: true,
-        finalResponse: messages[messages.length - 1].content,
+        finalResponse: finalAnswer,
         conversationHistory: conversationHistory,
         totalTurns: turnCount,
-        messages: messages
+        messages: messages,
+        toolsUsed: conversationHistory
+          .filter(entry => entry.role === 'tool')
+          .map(entry => ({
+            name: entry.toolName,
+            parameters: entry.parameters,
+            success: entry.result?.success || false
+          }))
       };
 
     } catch (error) {
@@ -575,21 +623,43 @@ class EnhancedAIService {
   }
 
   /**
-   * Execute a single tool call (placeholder - should be connected to tool executor)
+   * Execute a single tool call - connects to tool registry
    * @param {string} toolName - Tool name
    * @param {Object} parameters - Tool parameters
    * @returns {Promise<Object>} - Tool result
    */
   async executeToolCall(toolName, parameters) {
-    // This is a placeholder - in practice, this should call your tool executor
-    // For now, return a mock result
-    return {
-      toolName: toolName,
-      success: true,
-      data: `Mock result for ${toolName} with parameters: ${JSON.stringify(parameters)}`,
-      message: 'Tool executed successfully',
-      executionTime: 100
-    };
+    if (!this.toolRegistry) {
+      throw new Error('Tool registry not available');
+    }
+
+    try {
+      const tool = this.toolRegistry.getTool(toolName);
+      if (!tool) {
+        throw new Error(`Tool '${toolName}' not found`);
+      }
+
+      const startTime = Date.now();
+      const result = await tool.execute(parameters);
+      const executionTime = Date.now() - startTime;
+
+      return {
+        toolName: toolName,
+        success: result.success,
+        data: result.data,
+        message: result.message,
+        executionTime: executionTime
+      };
+
+    } catch (error) {
+      return {
+        toolName: toolName,
+        success: false,
+        data: null,
+        message: error.message,
+        executionTime: 0
+      };
+    }
   }
 
   /**
@@ -598,14 +668,26 @@ class EnhancedAIService {
    * @returns {Array} - Tools in Mistral API format
    */
   convertToolsToMistralFormat(tools) {
-    return tools.map(tool => ({
-      type: 'function',
-      function: {
-        name: tool.name,
-        description: tool.description,
-        parameters: this.convertParametersToJsonSchema(tool.parameters || [])
+    return tools.map(tool => {
+      // Get parameters from tool - handle both array and Map formats
+      let parameters = [];
+      if (tool.parameters) {
+        if (Array.isArray(tool.parameters)) {
+          parameters = tool.parameters;
+        } else if (tool.parameters instanceof Map) {
+          parameters = Array.from(tool.parameters.values());
+        }
       }
-    }));
+
+      return {
+        type: 'function',
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: this.convertParametersToJsonSchema(parameters)
+        }
+      };
+    });
   }
 
   /**
@@ -620,18 +702,26 @@ class EnhancedAIService {
       required: []
     };
 
+    if (!Array.isArray(parameters)) {
+      return schema;
+    }
+
     parameters.forEach(param => {
-      schema.properties[param.name] = {
-        type: param.type,
-        description: param.description
+      // Handle both object and Map entry formats
+      const paramName = param.name || param[0];
+      const paramData = param.name ? param : param[1];
+
+      schema.properties[paramName] = {
+        type: paramData.type || 'string',
+        description: paramData.description || ''
       };
 
-      if (param.required) {
-        schema.required.push(param.name);
+      if (paramData.required) {
+        schema.required.push(paramName);
       }
 
-      if (param.defaultValue !== undefined) {
-        schema.properties[param.name].default = param.defaultValue;
+      if (paramData.defaultValue !== undefined) {
+        schema.properties[paramName].default = paramData.defaultValue;
       }
     });
 
@@ -691,17 +781,42 @@ class EnhancedAIService {
     if (finalOptions.enableTools && finalOptions.tools && finalOptions.tools.length > 0) {
       apiParams.tools = this.convertToolsToMistralFormat(finalOptions.tools);
       apiParams.tool_choice = 'auto'; // Let the model decide when to use tools
+      
+      // Debug logging
+      console.log(`Mistral API call with ${apiParams.tools.length} tools enabled`);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Tools:', JSON.stringify(apiParams.tools, null, 2));
+      }
     }
 
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
+        console.log('=== MISTRAL API REQUEST ===');
+        console.log('Model:', apiParams.model);
+        console.log('Messages:', JSON.stringify(apiParams.messages, null, 2));
+        console.log('Tools enabled:', !!apiParams.tools);
+        if (apiParams.tools) {
+          console.log('Number of tools:', apiParams.tools.length);
+          console.log('Tool names:', apiParams.tools.map(t => t.function.name));
+        }
+        console.log('Tool choice:', apiParams.tool_choice);
+        
         const response = await this.mistralClient.chat.complete(apiParams);
+
+        console.log('=== MISTRAL API RESPONSE ===');
+        console.log('Full response:', JSON.stringify(response, null, 2));
 
         if (!response.choices || !response.choices[0]) {
           throw new Error('Invalid response format from Mistral API');
         }
 
         const choice = response.choices[0];
+        
+        console.log('=== CHOICE DETAILS ===');
+        console.log('Message content:', choice.message.content);
+        console.log('Tool calls:', choice.message.tool_calls);
+        console.log('Finish reason:', choice.finish_reason);
+        console.log('Has tool calls:', !!(choice.message.tool_calls && choice.message.tool_calls.length > 0));
         
         return {
           success: true,

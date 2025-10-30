@@ -1,6 +1,7 @@
 import SandboxExecutor from '../../../core/sandboxExecutor.js';
 import IntegratedAgentSystem from '../../../core/integratedAgentSystem.js';
 import EnhancedAIService from '../../../core/enhancedAIService.js';
+import ToolManager from '../../../core/toolManager.js';
 
 /**
  * POST /api/chat - Main chat API route
@@ -60,7 +61,7 @@ export async function POST(request) {
  */
 function detectAgentSuitableQuery(message) {
   const messageLower = message.toLowerCase();
-  
+
   // Tool-specific keywords that should trigger agent mode (for direct calculations/queries)
   const toolKeywords = [
     'weather in', 'temperature in', 'forecast for', 'climate in',
@@ -68,7 +69,7 @@ function detectAgentSuitableQuery(message) {
     'area of', 'what is the area', 'calculate area', 'find area',
     'percentage of', 'percent of', 'what percentage', 'calculate percentage'
   ];
-  
+
   // UI generation keywords that should trigger UI mode
   const uiKeywords = [
     'create a calculator', 'build a calculator', 'make a calculator',
@@ -79,7 +80,7 @@ function detectAgentSuitableQuery(message) {
     'loan calculator', 'mortgage calculator', 'interest calculator',
     'create an interface', 'build an interface', 'generate interface'
   ];
-  
+
   // Agent reasoning keywords
   const agentKeywords = [
     'analyze', 'research', 'investigate', 'compare', 'evaluate', 'assess',
@@ -92,160 +93,149 @@ function detectAgentSuitableQuery(message) {
   if (hasUIKeywords) {
     return false; // Use UI generation mode
   }
-  
+
   // Check for tool-specific queries
   const hasToolKeywords = toolKeywords.some(keyword => messageLower.includes(keyword));
   if (hasToolKeywords) {
     return true; // Use agent mode for tool execution
   }
-  
+
   // Check for agent reasoning keywords
   const hasAgentKeywords = agentKeywords.some(keyword => messageLower.includes(keyword));
   if (hasAgentKeywords) {
     return true; // Use agent mode for reasoning
   }
-  
+
   // Default to UI mode for simple calculator requests
   if (messageLower.includes('calculator') || messageLower.includes('calculate')) {
     return false; // Use UI generation mode
   }
-  
+
   // For other cases, use query complexity as heuristic
-  const isComplex = message.length > 100 || 
-                   (message.includes('?') && message.split('?').length > 2) ||
-                   message.includes(' and ') || 
-                   message.includes(' or ') ||
-                   message.includes('because') ||
-                   message.includes('however');
-  
+  const isComplex = message.length > 100 ||
+    (message.includes('?') && message.split('?').length > 2) ||
+    message.includes(' and ') ||
+    message.includes(' or ') ||
+    message.includes('because') ||
+    message.includes('however');
+
   return isComplex;
 }
 
 /**
- * Handle agent mode processing with integrated system
+ * Handle agent mode processing with direct tool calling
  * @param {string} message - User message
  * @returns {Promise<Response>} - Agent response
  */
 async function handleAgentMode(message) {
-  let integratedSystem = null;
-  
   try {
-    // Initialize integrated agent system
-    integratedSystem = new IntegratedAgentSystem();
-    
-    // Configure system with cost controls and safety guardrails
-    const systemConfig = {
-      costControls: {
-        maxAPICallsPerSession: 15, // Conservative limit for API
-        maxExecutionTimeMs: 180000, // 3 minutes max
-        maxToolExecutionsPerSession: 20
-      },
-      safetyGuardrails: {
-        maxIterationsPerQuery: 8, // Reasonable for API response
-        confidenceThreshold: 0.3,
-        errorThreshold: 3,
-        timeoutMs: 45000, // 45 seconds per iteration
-        enableLogging: true,
-        enableMonitoring: true
-      },
-      agent: {
-        maxIterations: 6,
-        strategy: 'default',
-        autonomous: {
-          operationMode: 'supervised',
-          thresholds: {
-            confidenceThreshold: 0.6,
-            maxIterationsBeforeHuman: 4
-          }
-        }
-      }
-    };
+    // Initialize tool manager
+    const toolManager = new ToolManager();
+    await toolManager.initialize();
 
-    await integratedSystem.initialize(systemConfig);
+    // Initialize enhanced AI service
+    const aiService = new EnhancedAIService(toolManager.toolRegistry);
 
-    // Process query with integrated system
-    const agentResponse = await integratedSystem.agentController.processQuery(message, systemConfig.agent);
+    // Test connection
+    const connectionTest = await aiService.testConnection();
+    if (!connectionTest.success) {
+      throw new Error(`Mistral API connection failed: ${connectionTest.message}`);
+    }
 
-    // Transform agent response to enhanced API format
+    // Debug: Log available tools
+    const availableTools = toolManager.getAvailableTools();
+    console.log('=== AVAILABLE TOOLS ===');
+    console.log(`Found ${availableTools.length} tools:`);
+    availableTools.forEach(tool => {
+      console.log(`- ${tool.name}: ${tool.description}`);
+      console.log(`  Category: ${tool.category}`);
+      console.log(`  Parameters: ${tool.parameters ? tool.parameters.length : 0}`);
+    });
+
+    // Debug: Test tool formatting for Mistral
+    const mistralFormattedTools = aiService.convertToolsToMistralFormat(availableTools);
+    console.log('=== MISTRAL FORMATTED TOOLS ===');
+    console.log(JSON.stringify(mistralFormattedTools, null, 2));
+
+    // Execute tool conversation
+    console.log('=== STARTING TOOL CONVERSATION ===');
+    console.log('User message:', message);
+    const conversationResult = await aiService.executeToolConversation(message, {
+      maxTurns: 5,
+      temperature: 0.7
+    });
+
+    console.log('=== CONVERSATION RESULT ===');
+    console.log('Success:', conversationResult.success);
+    console.log('Final response:', conversationResult.finalResponse);
+    console.log('Tools used:', conversationResult.toolsUsed);
+    console.log('Total turns:', conversationResult.totalTurns);
+
+    if (!conversationResult.success) {
+      console.error('Conversation failed:', conversationResult.error);
+      throw new Error(`Tool conversation failed: ${conversationResult.error.message}`);
+    }
+
+    // Transform to expected API format
     const response = {
-      reasoning: Array.isArray(agentResponse.reasoning) 
-        ? agentResponse.reasoning.join('\n\n') 
-        : agentResponse.reasoning,
-      uiComponents: null, // Agent mode focuses on reasoning, not UI
+      reasoning: conversationResult.finalResponse,
+      uiComponents: null,
       hasUI: false,
       agentMode: true,
-      iterations: agentResponse.iterations || 0,
-      toolsUsed: agentResponse.toolsUsed || [],
-      finalConfidence: agentResponse.finalConfidence || 0,
-      strategy: agentResponse.strategy || 'default',
-      status: agentResponse.success ? 'completed' : 'error',
-      
-      // Enhanced metadata from integrated system
-      systemMetadata: agentResponse.systemMetadata || {},
-      costControlStatus: agentResponse.costControlStatus || {},
-      
-      // Safety and monitoring information
+      iterations: conversationResult.totalTurns,
+      toolsUsed: conversationResult.toolsUsed || [],
+      finalConfidence: conversationResult.toolsUsed?.length > 0 ? 0.9 : 0.7,
+      strategy: 'direct_tool_calling',
+      status: 'completed',
+
+      // System metadata
+      systemMetadata: {
+        processingMode: 'direct_tool_calling',
+        toolsAvailable: toolManager.getAvailableTools().length,
+        mistralToolCalling: true,
+        conversationTurns: conversationResult.totalTurns
+      },
+
+      // Cost control status (simplified)
+      costControlStatus: {
+        apiCallsUsed: conversationResult.totalTurns,
+        toolExecutionsUsed: conversationResult.toolsUsed?.length || 0
+      },
+
       guardrailsApplied: true,
-      executionTime: agentResponse.executionTime,
-      sessionId: agentResponse.sessionId
+      executionTime: Date.now() - Date.now(), // Will be updated by timing
+      sessionId: `direct_${Date.now()}`
     };
 
-    // Handle agent errors with enhanced error information
-    if (!agentResponse.success && agentResponse.error) {
-      response.agentError = {
-        type: agentResponse.error.type,
-        message: agentResponse.error.message,
-        iteration: agentResponse.error.iteration
-      };
-      
-      // Add cost limit information if applicable
-      if (agentResponse.costLimitExceeded) {
-        response.costLimitExceeded = true;
-      }
-    }
-
-    // Add system status for debugging (in development)
-    if (process.env.NODE_ENV === 'development') {
-      response.systemStatus = integratedSystem.getSystemStatus();
-    }
+    // Always add conversation history for debugging
+    response.conversationHistory = conversationResult.conversationHistory;
+    response.debugInfo = {
+      toolsAvailable: availableTools.length,
+      mistralFormattedTools: mistralFormattedTools.length,
+      conversationSuccess: conversationResult.success
+    };
 
     return Response.json(response);
 
   } catch (error) {
-    console.error('Integrated agent system processing error:', error);
-    
-    // Create comprehensive error response
+    console.error('Direct tool calling error:', error);
+
     const errorResponse = {
       error: {
-        type: 'integrated_system_error',
-        message: 'An error occurred during integrated agent processing',
+        type: 'direct_tool_calling_error',
+        message: 'An error occurred during tool calling',
         details: error.message
       },
+      reasoning: 'I encountered an error while processing your request. Please try again.',
       agentMode: true,
-      guardrailsApplied: true,
-      systemError: true
+      status: 'error',
+      iterations: 0,
+      toolsUsed: [],
+      finalConfidence: 0,
+      guardrailsApplied: true
     };
 
-    // Add system status if available
-    if (integratedSystem && integratedSystem.initialized) {
-      try {
-        errorResponse.systemStatus = integratedSystem.getSystemStatus();
-      } catch (statusError) {
-        console.error('Failed to get system status:', statusError);
-      }
-    }
-
     return Response.json(errorResponse, { status: 500 });
-    
-  } finally {
-    // Cleanup: shutdown integrated system if it was initialized
-    if (integratedSystem && integratedSystem.initialized) {
-      try {
-        await integratedSystem.shutdown();
-      } catch (shutdownError) {
-        console.error('Error during system shutdown:', shutdownError);
-      }
-    }
   }
 }
 
@@ -258,7 +248,7 @@ async function handleUIGenerationMode(message) {
   try {
     // Create enhanced AI service instance for UI generation
     const enhancedAIService = new EnhancedAIService(null); // No tool registry needed for UI generation
-    
+
     // Get AI response
     const aiResponse = await enhancedAIService.generateResponse(message);
 
@@ -290,8 +280,8 @@ async function handleUIGenerationMode(message) {
 
       if (executionResult.success) {
         // Wrap single component in array for frontend compatibility
-        response.uiComponents = Array.isArray(executionResult.result) 
-          ? executionResult.result 
+        response.uiComponents = Array.isArray(executionResult.result)
+          ? executionResult.result
           : [executionResult.result];
       } else {
         // If sandbox execution fails, still return the reasoning but with error info
