@@ -12,12 +12,12 @@ class EnhancedAIService {
     this.promptingSystem = new AgentPromptingSystem(toolRegistry);
     this.responseParser = new AgentResponseParser();
     this.toolRegistry = toolRegistry;
-    
-    // Initialize Mistral client
+
+    // Initialize Mistral client with correct import
     this.mistralClient = new Mistral({
       apiKey: process.env.MISTRAL_API_KEY
     });
-    
+
     // Configuration
     this.maxRetries = 3;
     this.retryDelay = 1000; // 1 second
@@ -38,7 +38,7 @@ class EnhancedAIService {
   async generateAgentReasoning(userQuery, context = {}) {
     try {
       const prompt = this.promptingSystem.createInitialReasoningPrompt(userQuery, context);
-      
+
       const apiResponse = await this.callMistralWithRetry(prompt, {
         temperature: this.temperatureSettings.reasoning,
         maxTokens: 1500
@@ -49,7 +49,7 @@ class EnhancedAIService {
       }
 
       const parsedResponse = this.responseParser.parseInitialReasoning(apiResponse.content);
-      
+
       return {
         success: true,
         reasoning: parsedResponse.reasoning,
@@ -137,7 +137,7 @@ class EnhancedAIService {
 
       // Fallback to text parsing if no tool calls
       const parsedResponse = this.responseParser.parseToolSelection(apiResponse.content);
-      
+
       // Validate tool exists if one was selected
       if (parsedResponse.selectedTool && parsedResponse.actionType === 'tool_call') {
         const tool = this.toolRegistry.getTool(parsedResponse.selectedTool);
@@ -180,9 +180,11 @@ class EnhancedAIService {
    * @returns {Object} - Tool message for conversation
    */
   createToolMessage(toolCallId, toolResult) {
+    // Mistral API requires both 'name' and 'toolCallId' for tool messages
     return {
       role: 'tool',
-      tool_call_id: toolCallId,
+      name: toolResult.toolName,
+      toolCallId: toolCallId,
       content: JSON.stringify({
         success: toolResult.success,
         data: toolResult.data,
@@ -473,7 +475,7 @@ class EnhancedAIService {
     try {
       while (turnCount < finalOptions.maxTurns) {
         turnCount++;
-        
+
         console.log(`=== CONVERSATION TURN ${turnCount} ===`);
         console.log('Current messages:', JSON.stringify(messages, null, 2));
 
@@ -496,16 +498,26 @@ class EnhancedAIService {
 
         // Add assistant response to messages
         const assistantMessage = {
-          role: 'assistant',
-          content: apiResponse.content || null
+          role: 'assistant'
         };
-        
-        // Add tool_calls if present
-        if (apiResponse.toolCalls && apiResponse.toolCalls.length > 0) {
-          assistantMessage.tool_calls = apiResponse.toolCalls;
-          console.log('Adding tool_calls to assistant message:', apiResponse.toolCalls);
+
+        // Add content if present (can be empty string for tool calls)
+        if (apiResponse.content !== null && apiResponse.content !== undefined) {
+          assistantMessage.content = apiResponse.content;
         }
-        
+
+        // Add toolCalls if present
+        if (apiResponse.toolCalls && apiResponse.toolCalls.length > 0) {
+          assistantMessage.toolCalls = apiResponse.toolCalls;
+          console.log('Adding toolCalls to assistant message:', apiResponse.toolCalls);
+        }
+
+        // Ensure at least content or toolCalls is present
+        if (!assistantMessage.hasOwnProperty('content') && !assistantMessage.toolCalls) {
+          assistantMessage.content = '';
+        }
+
+        console.log('Final assistant message:', JSON.stringify(assistantMessage, null, 2));
         messages.push(assistantMessage);
 
         conversationHistory.push({
@@ -526,7 +538,7 @@ class EnhancedAIService {
           console.log('No tool calls found, ending conversation');
           break;
         }
-        
+
         console.log(`Found ${apiResponse.toolCalls.length} tool calls to execute`);
 
         // Execute tool calls
@@ -564,11 +576,12 @@ class EnhancedAIService {
           } catch (toolError) {
             console.error(`=== TOOL EXECUTION ERROR: ${toolCall.function.name} ===`);
             console.error('Error:', toolError);
-            
-            // Add error response
+
+            // Add error response with both name and toolCallId
             const errorMessage = {
               role: 'tool',
-              tool_call_id: toolCall.id,
+              name: toolCall.function.name,
+              toolCallId: toolCall.id,
               content: JSON.stringify({
                 success: false,
                 error: toolError.message
@@ -760,12 +773,12 @@ class EnhancedAIService {
       if (!msg.role) {
         throw new Error('Message must have a role field');
       }
-      
+
       // Ensure content is present for non-tool messages or when required
-      if (msg.role !== 'tool' && !msg.content && !msg.tool_calls) {
-        throw new Error(`Message with role '${msg.role}' must have content`);
+      if (msg.role !== 'tool' && !msg.content && !msg.toolCalls) {
+        throw new Error(`Message with role '${msg.role}' must have content or toolCalls`);
       }
-      
+
       return msg;
     });
 
@@ -774,14 +787,14 @@ class EnhancedAIService {
       model: 'mistral-large-latest',
       messages: formattedMessages,
       temperature: finalOptions.temperature,
-      max_tokens: finalOptions.maxTokens
+      maxTokens: finalOptions.maxTokens
     };
 
     // Add tools if enabled and available
     if (finalOptions.enableTools && finalOptions.tools && finalOptions.tools.length > 0) {
       apiParams.tools = this.convertToolsToMistralFormat(finalOptions.tools);
-      apiParams.tool_choice = 'auto'; // Let the model decide when to use tools
-      
+      apiParams.toolChoice = 'auto'; // Let the model decide when to use tools
+
       // Debug logging
       console.log(`Mistral API call with ${apiParams.tools.length} tools enabled`);
       if (process.env.NODE_ENV === 'development') {
@@ -799,8 +812,8 @@ class EnhancedAIService {
           console.log('Number of tools:', apiParams.tools.length);
           console.log('Tool names:', apiParams.tools.map(t => t.function.name));
         }
-        console.log('Tool choice:', apiParams.tool_choice);
-        
+        console.log('Tool choice:', apiParams.toolChoice);
+
         const response = await this.mistralClient.chat.complete(apiParams);
 
         console.log('=== MISTRAL API RESPONSE ===');
@@ -811,18 +824,18 @@ class EnhancedAIService {
         }
 
         const choice = response.choices[0];
-        
+
         console.log('=== CHOICE DETAILS ===');
         console.log('Message content:', choice.message.content);
-        console.log('Tool calls:', choice.message.tool_calls);
-        console.log('Finish reason:', choice.finish_reason);
-        console.log('Has tool calls:', !!(choice.message.tool_calls && choice.message.tool_calls.length > 0));
-        
+        console.log('Tool calls:', choice.message.toolCalls);
+        console.log('Finish reason:', choice.finishReason);
+        console.log('Has tool calls:', !!(choice.message.toolCalls && choice.message.toolCalls.length > 0));
+
         return {
           success: true,
           content: choice.message.content,
-          toolCalls: choice.message.tool_calls || null,
-          finishReason: choice.finish_reason,
+          toolCalls: choice.message.toolCalls || null,
+          finishReason: choice.finishReason,
           usage: response.usage,
           rawResponse: response
         };
@@ -830,7 +843,7 @@ class EnhancedAIService {
       } catch (error) {
         lastError = error;
         console.warn(`Enhanced AI Service - Attempt ${attempt} failed:`, error.message);
-        
+
         if (attempt < this.maxRetries) {
           await this.delay(this.retryDelay * attempt); // Exponential backoff
         }
@@ -930,11 +943,11 @@ class EnhancedAIService {
     if (config.maxRetries !== undefined) {
       this.maxRetries = Math.max(1, Math.min(10, config.maxRetries));
     }
-    
+
     if (config.retryDelay !== undefined) {
       this.retryDelay = Math.max(100, Math.min(10000, config.retryDelay));
     }
-    
+
     if (config.temperatureSettings) {
       this.temperatureSettings = { ...this.temperatureSettings, ...config.temperatureSettings };
     }
@@ -1036,7 +1049,7 @@ class EnhancedAIService {
 
     } catch (error) {
       console.error('Enhanced AI Service - Generate Response Error:', error);
-      
+
       return {
         success: false,
         error: {
@@ -1082,7 +1095,7 @@ class EnhancedAIService {
 
     } catch (error) {
       console.error('Enhanced AI Service - Calculation Error:', error);
-      
+
       // Handle network errors specifically
       if (error.name === 'TypeError' && error.message.includes('fetch')) {
         return {
@@ -1093,7 +1106,7 @@ class EnhancedAIService {
           }
         };
       }
-      
+
       return {
         success: false,
         error: {
