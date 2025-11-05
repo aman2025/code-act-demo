@@ -3,13 +3,13 @@
  * Implements LLM-driven decision making with environmental feedback
  */
 
-import AgentState from './agentState.js';
+import AgentState from '../observation/agentState.js';
 import StoppingConditions from './stoppingConditions.js';
-import ObservationGenerator from './observationGenerator.js';
-import FeedbackIntegrator from './feedbackIntegrator.js';
-import ErrorRecoverySystem from './errorRecoverySystem.js';
-import AutonomousOperationManager from './autonomousOperationManager.js';
-import HumanInteractionManager from './humanInteractionManager.js';
+import ObservationGenerator from '../observation/observationGenerator.js';
+import FeedbackIntegrator from '../feedback/feedbackIntegrator.js';
+import ErrorRecoverySystem from '../feedback/errorRecoverySystem.js';
+import AutonomousOperationManager from '../interaction/autonomousOperationManager.js';
+import HumanInteractionManager from '../interaction/humanInteractionManager.js';
 
 class AgentController {
   constructor() {

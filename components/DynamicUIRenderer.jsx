@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import ComponentFactory from './ComponentFactory';
+import ComponentFactory from './factory/ComponentFactory';
 import useChatStore from '../store/chatStore';
 
 /**

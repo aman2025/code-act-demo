@@ -18,28 +18,61 @@
   - **calculate/route.js**: Calculation processing endpoint
 
 ### `/components` - React Components
+UI components for the chat interface:
 - **ChatView.jsx**: Main chat interface component
 - **Messages.jsx**: Message display and management
 - **DynamicUIRenderer.jsx**: Renders AI-generated UI components
-- **ComponentFactory.js**: Factory for creating dynamic components
+- **factory/**: Component generation
+  - **ComponentFactory.js**: Factory for creating dynamic components
 - **README.md**: Component documentation and usage
 
-### `/core` - Agent System Architecture
-Core AI agent system with integrated tool execution:
+### `/core` - Core System Integration
+Core system orchestration and AI service integration:
 - **integratedAgentSystem.js**: Main system orchestrator
-- **agentController.js**: Agent reasoning and control logic
-- **agentState.js**: State management for agent operations
 - **enhancedAIService.js**: AI service with tool awareness
-- **toolManager.js**: Tool registration and execution
-- **toolExecutor.js**: Safe tool execution environment
-- **agentMonitoringSystem.js**: Performance and safety monitoring
-- **humanInteractionManager.js**: Human-in-the-loop integration
-- **errorRecoverySystem.js**: Error handling and recovery
 
-### `/tools` - Executable Tools
-- **areaCalculator.js**: Geometric area calculations
-- **percentageCalculator.js**: Percentage calculations
-- **mockServices.js**: Mock external services for testing
+### `/agent` - Agent System Architecture
+Modular agent system with decision-making, observation, interaction, and feedback:
+- **decision/**: Agent reasoning and control logic
+  - **agentController.js**: Main agent control loop
+  - **stoppingConditions.js**: Stopping condition evaluation
+- **observation/**: State management and monitoring
+  - **agentState.js**: Agent state management
+  - **observationGenerator.js**: Observation generation
+  - **agentMonitoringSystem.js**: Performance and safety monitoring
+- **interaction/**: Human and system interaction
+  - **humanInteractionManager.js**: Human-in-the-loop integration
+  - **humanInteractionAPI.js**: Human interaction API
+  - **autonomousOperationManager.js**: Autonomous operation management
+- **feedback/**: Learning and error recovery
+  - **errorRecoverySystem.js**: Error handling and recovery
+  - **feedbackIntegrator.js**: Feedback integration
+
+### `/tools` - Tool System
+Modular tool system with definitions, registry, and management:
+- **base/**: Base tool class
+  - **baseTool.js**: Foundation for all tools
+- **definitions/**: Tool implementations
+  - **areaCalculator.js**: Geometric area calculations
+  - **percentageCalculator.js**: Percentage calculations
+  - **mockServices.js**: Mock external services
+- **registry/**: Tool registration and discovery
+  - **toolRegistry.js**: Central tool registry
+- **manager/**: Tool execution and lifecycle
+  - **toolManager.js**: Tool management orchestration
+  - **toolExecutor.js**: Safe tool execution
+
+### `/prompt` - Prompt System
+Prompt engineering and response parsing:
+- **builder/**: Prompt construction
+  - **agentPromptingSystem.js**: Agent prompt generation
+- **parser/**: Response parsing
+  - **agentResponseParser.js**: Agent response parsing
+- **templates/**: Prompt templates (future)
+
+### `/sandbox` - Secure Execution
+Secure code execution environment:
+- **sandboxExecutor.js**: VM2 sandbox for safe code execution
 
 ### `/store` - State Management
 - **chatStore.js**: Zustand store for chat state and UI components

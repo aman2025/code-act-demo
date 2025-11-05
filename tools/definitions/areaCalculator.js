@@ -3,7 +3,7 @@
  * Supports triangle, rectangle, and circle calculations
  */
 
-import BaseTool from '../core/baseTool.js';
+import BaseTool from '../base/baseTool.js';
 
 class AreaCalculator extends BaseTool {
   constructor() {

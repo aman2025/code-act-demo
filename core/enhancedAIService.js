@@ -4,8 +4,8 @@
  */
 
 import { Mistral } from '@mistralai/mistralai';
-import AgentPromptingSystem from './agentPromptingSystem.js';
-import AgentResponseParser from './agentResponseParser.js';
+import AgentPromptingSystem from '../prompt/builder/agentPromptingSystem.js';
+import AgentResponseParser from '../prompt/parser/agentResponseParser.js';
 
 class EnhancedAIService {
   constructor(toolRegistry) {

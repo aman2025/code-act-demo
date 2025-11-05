@@ -3,12 +3,12 @@
  * Coordinates between ToolRegistry, ToolExecutor, and ObservationGenerator
  */
 
-import ToolRegistry from './toolRegistry.js';
+import ToolRegistry from '../registry/toolRegistry.js';
 import ToolExecutor from './toolExecutor.js';
-import ObservationGenerator from './observationGenerator.js';
-import AreaCalculator from '../tools/areaCalculator.js';
-import PercentageCalculator from '../tools/percentageCalculator.js';
-import { WeatherService, FlightService } from '../tools/mockServices.js';
+import ObservationGenerator from '../../agent/observation/observationGenerator.js';
+import AreaCalculator from '../definitions/areaCalculator.js';
+import PercentageCalculator from '../definitions/percentageCalculator.js';
+import { WeatherService, FlightService } from '../definitions/mockServices.js';
 
 class ToolManager {
   constructor() {

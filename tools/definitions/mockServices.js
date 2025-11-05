@@ -3,7 +3,7 @@
  * Includes WeatherService and FlightService with realistic mock responses
  */
 
-import BaseTool from '../core/baseTool.js';
+import BaseTool from '../base/baseTool.js';
 
 /**
  * Mock Weather Service Tool

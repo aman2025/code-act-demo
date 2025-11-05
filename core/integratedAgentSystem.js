@@ -3,12 +3,12 @@
  * Connects LLM reasoning, tool execution, and feedback loops with safety controls
  */
 
-import AgentController from './agentController.js';
-import ToolManager from './toolManager.js';
+import AgentController from '../agent/decision/agentController.js';
+import ToolManager from '../tools/manager/toolManager.js';
 import EnhancedAIService from './enhancedAIService.js';
-import AgentResponseParser from './agentResponseParser.js';
-import AgentPromptingSystem from './agentPromptingSystem.js';
-import AgentMonitoringSystem from './agentMonitoringSystem.js';
+import AgentResponseParser from '../prompt/parser/agentResponseParser.js';
+import AgentPromptingSystem from '../prompt/builder/agentPromptingSystem.js';
+import AgentMonitoringSystem from '../agent/observation/agentMonitoringSystem.js';
 
 class IntegratedAgentSystem {
   constructor() {

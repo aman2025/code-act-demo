@@ -3,7 +3,7 @@
  * Supports percentage calculation, percentage increase/decrease, and percentage of value
  */
 
-import BaseTool from '../core/baseTool.js';
+import BaseTool from '../base/baseTool.js';
 
 class PercentageCalculator extends BaseTool {
   constructor() {

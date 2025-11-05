@@ -1,7 +1,7 @@
-import SandboxExecutor from '../../../core/sandboxExecutor.js';
+import SandboxExecutor from '../../../sandbox/sandboxExecutor.js';
 import IntegratedAgentSystem from '../../../core/integratedAgentSystem.js';
 import EnhancedAIService from '../../../core/enhancedAIService.js';
-import ToolManager from '../../../core/toolManager.js';
+import ToolManager from '../../../tools/manager/toolManager.js';
 
 /**
  * POST /api/chat - Main chat API route
